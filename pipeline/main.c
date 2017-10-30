@@ -1,6 +1,7 @@
 /*
  * This program aims at creating a customized full blown DPDK application
  */
+#define _GNU_SOURCE
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,6 +14,12 @@
 #include <getopt.h>
 #include <unistd.h>
 
+#include <linux/unistd.h>
+#include <linux/kernel.h>
+#include <linux/types.h>
+#include <sys/syscall.h>
+#include <pthread.h>
+
 #include <rte_eal.h>
 #include <rte_ethdev.h>
 #include <rte_common.h>
@@ -23,6 +30,7 @@
 #include <rte_ring.h>
 #include <rte_malloc.h>
 #include <rte_string_fns.h>
+#include <rte_debug.h>
 
 /* Set of macros */
 #define MBUF_CACHE_SIZE 512
@@ -33,12 +41,72 @@
 #define BURST_SIZE 2048
 #define MAX_RX_QUEUE_PER_PORT 128
 #define MAX_RX_DESC 4096
-#define RX_RING_SZ 65536
+#define RX_RING_SZ 65536*4
 #define FLOW_NUM 65536
 #define WRITE_FILE
 #define MAX_LCORE_PARAMS 1024
+#define MAX_RX_QUEUE_PER_LCORE 16
 
-#define IPG
+#define SD
+//#define IPG
+
+#ifdef SD
+#define gettid() syscall(__NR_gettid)
+
+#define SCHED_DEADLINE 6
+
+/* use the proper syscall numbers */
+#ifdef __x86_64__
+#define __NR_sched_setattr             314
+#define __NR_sched_getattr             315
+#endif
+
+#ifdef __i386__
+#define __NR_sched_setattr             351
+#define __NR_sched_getattr             352
+#endif
+
+#ifdef __arm__
+#define __NR_sched_setattr             380
+#define __NR_sched_getattr             381
+#endif
+
+static volatile int done;
+
+struct sched_attr {
+       __u32 size;
+
+       __u32 sched_policy;
+       __u64 sched_flags;
+
+       /* SCHED_NORMAL, SCHED_BATCH */
+       __s32 sched_nice;
+
+       /* SCHED_FIFO, SCHED_RR */
+       __u32 sched_priority;
+
+       /* SCHED_DEADLINE (nsec) */
+       __u64 sched_runtime;
+       __u64 sched_deadline;
+       __u64 sched_period;
+};
+
+int sched_setattr(pid_t pid,
+                 const struct sched_attr *attr,
+                 unsigned int flags)
+{
+       return syscall(__NR_sched_setattr, pid, attr, flags);
+}
+
+int sched_getattr(pid_t pid,
+                 struct sched_attr *attr,
+                 unsigned int size,
+                 unsigned int flags)
+{
+       return syscall(__NR_sched_getattr, pid, attr, size, flags);
+}
+
+#endif
 
 /* mask of enabled ports. */
 uint32_t enabled_port_mask = 0x4;
@@ -57,7 +125,7 @@ static unsigned promiscuous_on = 1;
 
 uint16_t n_rx_thread, n_tx_thread;
 
-static struct rte_ring *rings[RX_RINGS];
+//static struct rte_ring *rings[RX_RINGS];
 
 static struct rte_timer timer;
 
@@ -97,6 +165,11 @@ enum {
 	CMD_LINE_OPT_TX_CONFIG
 };
 
+struct lcore_rx_queue {
+	uint8_t port_id;
+	uint8_t queue_id;
+} __rte_cache_aligned;
+
 struct rx_thread_params {
 	uint8_t port_id;
 	uint8_t queue_id;
@@ -128,6 +201,51 @@ static struct tx_thread_params tx_thread_params_array_default[] = {
 static struct tx_thread_params *tx_thread_params =
 		tx_thread_params_array_default;
 static uint16_t nb_tx_thread_params = RTE_DIM(tx_thread_params_array_default);
+
+#define MAX_RX_QUEUE_PER_THREAD 16
+#define MAX_TX_PORT_PER_THREAD  RTE_MAX_ETHPORTS
+#define MAX_TX_QUEUE_PER_PORT   RTE_MAX_ETHPORTS
+#define MAX_RX_QUEUE_PER_PORT   128
+
+#define MAX_RX_THREAD 1024
+#define MAX_TX_THREAD 1024
+#define MAX_THREAD    (MAX_RX_THREAD + MAX_TX_THREAD)
+
+rte_atomic16_t rx_counter;  /**< Number of spawned rx threads */
+rte_atomic16_t tx_counter;  /**< Number of spawned tx threads */
+
+struct thread_conf {
+	uint16_t lcore_id;      /**< Initial lcore for rx thread */
+	uint16_t cpu_id;        /**< Cpu id for cpu load stats counter */
+	uint16_t thread_id;     /**< Thread ID */
+};
+
+struct thread_rx_conf {
+	struct thread_conf conf;
+
+	uint16_t n_rx_queue;
+	struct lcore_rx_queue rx_queue_list[MAX_RX_QUEUE_PER_LCORE];
+
+	uint16_t n_ring;        /**< Number of output rings */
+	struct rte_ring *ring[RTE_MAX_LCORE];
+	//struct lthread_cond *ready[RTE_MAX_LCORE];
+} __rte_cache_aligned;
+
+uint16_t n_rx_thread;
+struct thread_rx_conf rx_thread[MAX_RX_THREAD];
+
+struct thread_tx_conf {
+	struct thread_conf conf;
+	//uint16_t tx_queue_id[RTE_MAX_LCORE];
+
+	struct rte_ring *ring;
+	//struct lthread_cond **ready;
+
+} __rte_cache_aligned;
+
+uint16_t n_tx_thread;
+struct thread_tx_conf tx_thread[MAX_TX_THREAD];
+
 
 struct pkt_count
 {
@@ -489,7 +607,6 @@ static int parse_args(int argc, char **argv)
 	return ret;
 }
 
-/*
 static int
 init_rx_queues(void)
 {
@@ -532,12 +649,55 @@ init_tx_threads(void)
 	for (i = 0; i < nb_tx_thread_params; ++i) {
 		tx_thread[n_tx_thread].conf.thread_id = tx_thread_params[i].thread_id;
 		tx_thread[n_tx_thread].conf.lcore_id = tx_thread_params[i].lcore_id;
+		printf("tx-thread %u: thread_id %u, lcore_id %u\n", n_tx_thread, tx_thread[n_tx_thread].conf.thread_id, tx_thread[n_tx_thread].conf.lcore_id);
 		n_tx_thread++;
 	}
 	return 0;
 }
 
-*/
+static int
+init_rx_rings(void)
+{
+	unsigned socket_io;
+	struct thread_rx_conf *rx_conf;
+	struct thread_tx_conf *tx_conf;
+	unsigned rx_thread_id, tx_thread_id;
+	char name[256];
+	struct rte_ring *ring = NULL;
+
+	for (tx_thread_id = 0; tx_thread_id < n_tx_thread; tx_thread_id++)
+	{
+		tx_conf = &tx_thread[tx_thread_id];
+		printf("Connecting tx-thread %d with rx-thread %d\n",
+			tx_thread_id, tx_conf->conf.thread_id);
+
+		rx_thread_id = tx_conf->conf.thread_id;
+		if (rx_thread_id > n_tx_thread)
+		{
+			printf("connection from tx-thread %u to rx-thread %u fails"
+				"(rx-thread not defined)\n",tx_thread_id, rx_thread_id);
+			return -1;
+		}
+
+		rx_conf = &rx_thread[rx_thread_id];
+		socket_io = rte_lcore_to_socket_id(rx_conf->conf.lcore_id);
+
+		snprintf(name, sizeof(name), "app_ring_s%u_rx%u_tx%u",
+			socket_io, rx_thread_id, tx_thread_id);
+
+		ring = rte_ring_create(name, RX_RING_SZ, socket_io,
+			RING_F_SP_ENQ | RING_F_SC_DEQ);
+		if (ring == NULL)
+			rte_panic("Cannot create ring to connect rx-thread %u "
+				"with tx-thread %u\n", rx_thread_id, tx_thread_id);
+
+		rx_conf->ring[rx_conf->n_ring] = ring;
+
+		tx_conf->ring = ring;
+		rx_conf->n_ring++;
+	}
+	return 0;
+}
 
 /*
  * The lcore main. This is the main thread that does the work, reading from
@@ -551,8 +711,12 @@ lcore_main_rx(__attribute__((unused)) void *dummy)
 	int q;
 
 	unsigned lcore_id;
+	struct thread_rx_conf *rx_conf;
+
 	lcore_id = rte_lcore_id();
-	//q = lcore_conf[lcore_id].queue_id;
+	rx_conf = (struct thread_rx_conf *)dummy;
+
+	q = rx_conf->rx_queue_list[0].queue_id;
 
 	printf("Setting: lcore %u checks queue %d\n", lcore_id, q);
 
@@ -568,7 +732,7 @@ lcore_main_rx(__attribute__((unused)) void *dummy)
 		if (unlikely(nb_rx == 0))
 			continue;
 
-		rte_ring_enqueue_burst(rings[q],
+		rte_ring_enqueue_burst(rx_conf->ring[0],
                                 (void *)bufs, nb_rx, NULL);
 
 		/* Per packet processing */
@@ -587,21 +751,36 @@ lcore_main_px(__attribute__((unused)) void *dummy)
 	uint16_t nb_rx, index_l, index_h;
 	uint32_t buf;
 	struct rte_mbuf *bufs[burst_size];
+	struct thread_tx_conf *tx_conf = (struct thread_tx_conf *)dummy;
 
-	if (lcore_id == 4)
+/*	if (lcore_id == 4)
 		q = 0;
 	else if (lcore_id == 2)
 		q = 1;
+*/
+	cpu_set_t mask;
+	CPU_ZERO(&mask);
+	CPU_SET(tx_conf->conf.thread_id+1, &mask);
 
-	printf("Settings: lcore %d dequeues queue %d\n", lcore_id, q);
+	if (pthread_setaffinity_np(pthread_self(), sizeof(mask), &mask) < 0)
+	{
+		perror("pthread_setaffinity_np");
+	}
+
+	q = tx_conf->conf.thread_id;
+	printf("Settings: lcore %d dequeues queue %u\n", lcore_id, tx_conf->conf.thread_id);
+	printf("Current lcore %d, %u\n", rte_lcore_id(), tx_conf->conf.thread_id);
+
 	for(;;)
 	{
 		//struct rte_mbuf *bufs[burst_size];
-		nb_rx = rte_ring_dequeue_burst(rings[q], (void *)bufs, burst_size, NULL);
+		nb_rx = rte_ring_dequeue_burst(tx_conf->ring, (void *)bufs, burst_size, NULL);
 		if (unlikely(nb_rx == 0))
                         continue;
 		gCtr[q] += nb_rx;
 
+		for (buf = 0; buf < nb_rx; buf++)
+			rte_pktmbuf_free(bufs[buf]);
 		/* Per packet processing */
                 for (buf = 0; buf < nb_rx; buf++)
                 {
@@ -654,6 +833,7 @@ lcore_main_px(__attribute__((unused)) void *dummy)
 				}
 			}
                 }
+
 	}
 }
 
@@ -712,6 +892,62 @@ static void handler(int sig)
 	exit(1);
 }
 
+static int
+pthread_run(__rte_unused void *arg)
+{
+	int lcore_id = rte_lcore_id();
+	int i;
+
+#ifdef SD
+	struct sched_attr attr;
+	int ret;
+	unsigned flags = 0;
+
+        uint64_t mask;
+
+        mask = 0xFFFFFFFFFF;
+        ret = sched_setaffinity(0, sizeof(mask), (cpu_set_t*)&mask);
+        if (ret != 0) rte_exit(EXIT_FAILURE, "Error: cannot set affinity. Quitting...\n");
+
+        printf("deadline thread started [%ld]\n", gettid());
+
+        attr.size = sizeof(attr);
+        attr.sched_flags = 0;
+        attr.sched_nice = 0;
+        attr.sched_priority = 0;
+
+        attr.sched_policy = SCHED_DEADLINE;
+        attr.sched_runtime = 20*1000;
+        attr.sched_period = attr.sched_deadline = 20*1000;
+
+        ret = sched_setattr(0, &attr, flags);
+        if (ret < 0) {
+                done = 0;
+                perror("sched_setattr");
+                exit(-1);
+        }
+#endif
+
+	for (i = 0; i < n_rx_thread; i++)
+		if (rx_thread[i].conf.lcore_id == lcore_id)
+		{
+			printf("Start rx thread on %d...\n", lcore_id);
+			lcore_main_rx((void *)&rx_thread[i]);
+			return 0;
+		}
+
+
+	for (i = 0; i < n_tx_thread; i++)
+		if (tx_thread[i].conf.lcore_id == lcore_id)
+		{
+			printf("Start tx thread on %d...\n", lcore_id);
+			lcore_main_px((void *)&tx_thread[i]);
+			return 0;
+		}
+
+	return 0;
+}
+
 int main(int argc, char **argv)
 {
 	struct rte_mempool *mbuf_pool;
@@ -734,9 +970,20 @@ int main(int argc, char **argv)
 	if (ret < 0)
 		rte_exit(EXIT_FAILURE, "Wrong APP parameters\n");
 
-	//ret = parse_lcore_conf();
-	//if (ret < 0)
-	//	rte_exit(EXIT_FAILURE, "The numbers of RX queues and lcores do not match\n");
+	printf("Initializing rx-queues...\n");
+	ret = init_rx_queues();
+	if (ret < 0)
+		rte_exit(EXIT_FAILURE, "init_rx_queues failed\n");
+
+	printf("Initializing tx-threads...\n");
+	ret = init_tx_threads();
+	if (ret < 0)
+		rte_exit(EXIT_FAILURE, "init_tx_threads failed\n");
+
+	printf("Initializing rings...\n");
+	ret = init_rx_rings();
+	if (ret < 0)
+		rte_exit(EXIT_FAILURE, "init_rx_rings failed\n");
 
 	rte_timer_subsystem_init();
 
@@ -754,7 +1001,7 @@ int main(int argc, char **argv)
         rx_conf.rx_thresh.pthresh = 8;
         rx_conf.rx_thresh.hthresh = 8;
         rx_conf.rx_thresh.wthresh = 0;
-	rx_conf.rx_free_thresh = 2048;
+	rx_conf.rx_free_thresh = 32;
         rx_conf.rx_drop_en = 0;
 
 	nb_lcores = rte_lcore_count();
@@ -787,13 +1034,13 @@ int main(int argc, char **argv)
 			if (ret < 0)
 				rte_exit(EXIT_FAILURE, "Cannot setup queue %d\n", qid);
 
-			char ring_name[256];
+/*			char ring_name[256];
 			snprintf(ring_name, sizeof(ring_name), "transient_ring_%d", qid);
 			rings[qid] = rte_ring_create(ring_name, RX_RING_SZ,
                         	rte_socket_id(), RING_F_SC_DEQ | RING_F_SP_ENQ);
 			if (rings[qid] == NULL)
 				rte_exit(EXIT_FAILURE, "Cannot create transient ring\n");
-		}
+*/		}
 
 		ret = rte_eth_dev_start(portid);
 		if (ret < 0)
@@ -822,14 +1069,13 @@ int main(int argc, char **argv)
 
 /*	RTE_LCORE_FOREACH_SLAVE(lcore_id)
 	{
-		if (lcore_id == 9 || lcore_id == 6)
-			rte_eal_remote_launch((lcore_function_t *)lcore_main_rx, NULL, lcore_id);
-		else
-			rte_eal_remote_launch((lcore_function_t *)lcore_main_px, NULL, lcore_id);
+		rte_eal_remote_launch((lcore_function_t *)lcore_main_rx,
+					(void *)&rx_thread[lcore_id], lcore_id);
 	}
 */
-
 	rte_eal_mp_remote_launch(pthread_run, NULL, SKIP_MASTER);
+
+
 	while(1)
 		rte_timer_manage();
 

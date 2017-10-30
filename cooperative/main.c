@@ -559,7 +559,7 @@ init_rx_rings(void)
 		snprintf(name, sizeof(name), "app_ring_s%u_rx%u_tx%u",
 				socket_io, rx_thread_id, tx_thread_id);
 
-		ring = rte_ring_create(name, 4096, socket_io,
+		ring = rte_ring_create(name, 4096*16, socket_io,
 				RING_F_SP_ENQ | RING_F_SC_DEQ);
 
 		if (ring == NULL)
@@ -688,7 +688,7 @@ lthread_rx(void *dummy)
 			nb_rx = rte_eth_rx_burst(portid, queueid, pkts_burst,
 				MAX_PKT_BURST);
 
-			re[queueid] += nb_rx;
+//			re[queueid] += nb_rx;
 
 			if (nb_rx != 0)
 			{
@@ -764,7 +764,7 @@ lthread_tx_per_ring(void *dummy)
 		nb_rx = rte_ring_sc_dequeue_burst(ring, (void **)pkts_burst,
 				MAX_PKT_BURST, NULL);
 		//SET_CPU_IDLE(tx_conf, CPU_POLL);
-
+		re[tx_conf->conf.thread_id] += nb_rx;
 		if (nb_rx > 0) {
 			//SET_CPU_BUSY(tx_conf, CPU_PROCESS);
 			//portid = pkts_burst[0]->port;
@@ -897,6 +897,12 @@ static void handler(int sig)
         printf("\nDPDK: Received pkts %lu \nDropped packets %lu \nErroneous packets %lu\n",
 				eth_stats.ipackets + eth_stats.imissed + eth_stats.ierrors,
 				eth_stats.imissed, eth_stats.ierrors);
+
+	FILE *fp;
+	fp = fopen("tmp.txt", "a");
+	fprintf(fp, "%lu %lu %lu %lu\n", eth_stats.ipackets + eth_stats.imissed
+				 + eth_stats.ierrors, eth_stats.imissed, re[0], re[1]);
+	fclose(fp);
 	exit(0);
 }
 

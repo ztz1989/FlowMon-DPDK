@@ -826,7 +826,7 @@ port_init(uint8_t port, struct rte_mempool *mbuf_pool)
         rx_conf.rx_thresh.pthresh = 8;
         rx_conf.rx_thresh.hthresh = 8;
         rx_conf.rx_thresh.wthresh = 0;
-	rx_conf.rx_free_thresh = 2048;
+	rx_conf.rx_free_thresh = 32;
         rx_conf.rx_drop_en = 0;
 
 	#ifdef DOUBLE_HASH
