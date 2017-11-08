@@ -148,7 +148,7 @@ static uint16_t nb_tx_thread_params = RTE_DIM(tx_thread_params_array_default);
 /**
  * Producers and consumers threads configuration
  */
-static int lthreads_on = 1; /**< Use lthreads for processing*/
+//static int lthreads_on = 1; /**< Use lthreads for processing*/
 
 rte_atomic16_t rx_counter;  /**< Number of spawned rx threads */
 rte_atomic16_t tx_counter;  /**< Number of spawned tx threads */
@@ -559,7 +559,7 @@ init_rx_rings(void)
 		snprintf(name, sizeof(name), "app_ring_s%u_rx%u_tx%u",
 				socket_io, rx_thread_id, tx_thread_id);
 
-		ring = rte_ring_create(name, 4096*16, socket_io,
+		ring = rte_ring_create(name, 4096*16*8, socket_io,
 				RING_F_SP_ENQ | RING_F_SC_DEQ);
 
 		if (ring == NULL)
@@ -646,8 +646,8 @@ static void
 lthread_rx(void *dummy)
 {
 	int ret;
-	uint32_t nb_rx;
-	int i, j;
+	int nb_rx, j, k;
+	uint32_t i;
 	uint8_t portid, queueid;
 	int worker_id;
 	int len[RTE_MAX_LCORE] = { 0 };
@@ -711,7 +711,6 @@ lthread_rx(void *dummy)
 				len[worker_id] = new_len;
 
 				if (unlikely(ret < nb_rx)) {
-					uint32_t k;
 
 					for (k = ret; k < nb_rx; k++) {
 						struct rte_mbuf *m = pkts_burst[k];
@@ -734,8 +733,8 @@ lthread_rx(void *dummy)
 static void
 lthread_tx_per_ring(void *dummy)
 {
-	int nb_rx;
-	uint8_t portid;
+	uint64_t nb_rx;
+	//uint8_t portid;
 	struct rte_ring *ring;
 	struct thread_tx_conf *tx_conf;
 	struct rte_mbuf *pkts_burst[MAX_PKT_BURST];
@@ -782,7 +781,7 @@ lthread_tx(void *args)
 	struct lthread *lt;
 
 	unsigned lcore_id;
-	uint8_t portid;
+	//uint8_t portid;
 	struct thread_tx_conf *tx_conf;
 
 	tx_conf = (struct thread_tx_conf *)args;
@@ -863,7 +862,7 @@ lthread_spawner(__rte_unused void *arg)
 static int
 lthread_master_spawner(__rte_unused void *arg) {
 	struct lthread *lt;
-	int lcore_id = rte_lcore_id();
+	//int lcore_id = rte_lcore_id();
 
 	//RTE_PER_LCORE(lcore_conf) = &lcore_conf[lcore_id];
 	lthread_create(&lt, -1, lthread_spawner, NULL);
@@ -878,7 +877,7 @@ lthread_master_spawner(__rte_unused void *arg) {
 static int
 sched_spawner(__rte_unused void *arg) {
 	struct lthread *lt;
-	int lcore_id = rte_lcore_id();
+	//int lcore_id = rte_lcore_id();
 
 	//RTE_PER_LCORE(lcore_conf) = &lcore_conf[lcore_id];
 	lthread_create(&lt, -1, lthread_null, NULL);
@@ -894,9 +893,10 @@ static void handler(int sig)
 	struct rte_eth_stats eth_stats;
 	rte_eth_stats_get(PORT_ID, &eth_stats);
 
-        printf("\nDPDK: Received pkts %lu \nDropped packets %lu \nErroneous packets %lu\n",
+        printf("\nDPDK: Received pkts %lu \nDropped packets %lu \nErroneous packets %lu\n"
+	       "Counters %lu\t %lu\n",
 				eth_stats.ipackets + eth_stats.imissed + eth_stats.ierrors,
-				eth_stats.imissed, eth_stats.ierrors);
+				eth_stats.imissed, eth_stats.ierrors, re[0], re[1]);
 
 	FILE *fp;
 	fp = fopen("tmp.txt", "a");

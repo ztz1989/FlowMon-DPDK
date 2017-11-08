@@ -41,7 +41,7 @@
 #define BURST_SIZE 2048
 #define MAX_RX_QUEUE_PER_PORT 128
 #define MAX_RX_DESC 4096
-#define RX_RING_SZ 65536*4
+#define RX_RING_SZ 65536*8
 #define FLOW_NUM 65536
 #define WRITE_FILE
 #define MAX_LCORE_PARAMS 1024
@@ -104,6 +104,37 @@ int sched_getattr(pid_t pid,
                  unsigned int flags)
 {
        return syscall(__NR_sched_getattr, pid, attr, size, flags);
+}
+
+static void set_affinity(void)
+{
+        struct sched_attr attr;
+        int ret;
+        unsigned flags = 0;
+
+        uint64_t mask;
+
+        mask = 0xFFFFFFFFFF;
+        ret = sched_setaffinity(0, sizeof(mask), (cpu_set_t*)&mask);
+        if (ret != 0) rte_exit(EXIT_FAILURE, "Error: cannot set affinity. Quitting...\n");
+
+        printf("deadline thread started [%ld]\n", gettid());
+
+        attr.size = sizeof(attr);
+        attr.sched_flags = 0;
+        attr.sched_nice = 0;
+        attr.sched_priority = 0;
+
+        attr.sched_policy = SCHED_DEADLINE;
+        attr.sched_runtime = 1000*1000;
+        attr.sched_period = attr.sched_deadline = 2000*1000;
+
+        ret = sched_setattr(0, &attr, flags);
+        if (ret < 0) {
+                done = 0;
+                perror("sched_setattr");
+                exit(-1);
+        }
 }
 
 #endif
@@ -718,6 +749,10 @@ lcore_main_rx(__attribute__((unused)) void *dummy)
 
 	q = rx_conf->rx_queue_list[0].queue_id;
 
+#ifdef SD
+        set_affinity();
+#endif
+
 	printf("Setting: lcore %u checks queue %d\n", lcore_id, q);
 
 	/* Run until the application is quit or killed. */
@@ -753,23 +788,8 @@ lcore_main_px(__attribute__((unused)) void *dummy)
 	struct rte_mbuf *bufs[burst_size];
 	struct thread_tx_conf *tx_conf = (struct thread_tx_conf *)dummy;
 
-/*	if (lcore_id == 4)
-		q = 0;
-	else if (lcore_id == 2)
-		q = 1;
-*/
-	cpu_set_t mask;
-	CPU_ZERO(&mask);
-	CPU_SET(tx_conf->conf.thread_id+1, &mask);
-
-	if (pthread_setaffinity_np(pthread_self(), sizeof(mask), &mask) < 0)
-	{
-		perror("pthread_setaffinity_np");
-	}
-
 	q = tx_conf->conf.thread_id;
-	printf("Settings: lcore %d dequeues queue %u\n", lcore_id, tx_conf->conf.thread_id);
-	printf("Current lcore %d, %u\n", rte_lcore_id(), tx_conf->conf.thread_id);
+	printf("lcore %d dequeues queue %u\n", lcore_id, tx_conf->conf.thread_id);
 
 	for(;;)
 	{
@@ -898,36 +918,6 @@ pthread_run(__rte_unused void *arg)
 	int lcore_id = rte_lcore_id();
 	int i;
 
-#ifdef SD
-	struct sched_attr attr;
-	int ret;
-	unsigned flags = 0;
-
-        uint64_t mask;
-
-        mask = 0xFFFFFFFFFF;
-        ret = sched_setaffinity(0, sizeof(mask), (cpu_set_t*)&mask);
-        if (ret != 0) rte_exit(EXIT_FAILURE, "Error: cannot set affinity. Quitting...\n");
-
-        printf("deadline thread started [%ld]\n", gettid());
-
-        attr.size = sizeof(attr);
-        attr.sched_flags = 0;
-        attr.sched_nice = 0;
-        attr.sched_priority = 0;
-
-        attr.sched_policy = SCHED_DEADLINE;
-        attr.sched_runtime = 20*1000;
-        attr.sched_period = attr.sched_deadline = 20*1000;
-
-        ret = sched_setattr(0, &attr, flags);
-        if (ret < 0) {
-                done = 0;
-                perror("sched_setattr");
-                exit(-1);
-        }
-#endif
-
 	for (i = 0; i < n_rx_thread; i++)
 		if (rx_thread[i].conf.lcore_id == lcore_id)
 		{
@@ -993,7 +983,7 @@ int main(int argc, char **argv)
 	lcore_id = rte_lcore_id();
 	rte_timer_reset(&timer, hz, PERIODICAL, lcore_id, timer_cb, NULL);
 
-	mbuf_pool = rte_pktmbuf_pool_create("MBUF_POOL", 65535,
+	mbuf_pool = rte_pktmbuf_pool_create("MBUF_POOL", 524288-1,
 			MBUF_CACHE_SIZE, 0, RTE_MBUF_DEFAULT_BUF_SIZE, rte_socket_id());
 	if (mbuf_pool == NULL)
 		rte_exit(EXIT_FAILURE, "Cannot create mbuf pool\n");
@@ -1009,6 +999,12 @@ int main(int argc, char **argv)
 
 	nb_ports = rte_eth_dev_count();
 	printf("The number of ports is %u\n", nb_ports);
+
+/*
+#ifdef SD
+	set_affinity();
+#endif
+*/
 
 	for (portid = 0; portid < nb_ports; portid++)
 	{
@@ -1068,14 +1064,16 @@ int main(int argc, char **argv)
 	}
 
 /*	RTE_LCORE_FOREACH_SLAVE(lcore_id)
-	{
 		rte_eal_remote_launch((lcore_function_t *)lcore_main_rx,
 					(void *)&rx_thread[lcore_id], lcore_id);
-	}
 */
+
 	rte_eal_mp_remote_launch(pthread_run, NULL, SKIP_MASTER);
 
-
+/*	pthread_t a, b;
+	pthread_create(&a, NULL, &lcore_main_rx, &rx_thread[0]);
+	pthread_create(&b, NULL, &lcore_main_rx, &rx_thread[1]);
+*/
 	while(1)
 		rte_timer_manage();
 
