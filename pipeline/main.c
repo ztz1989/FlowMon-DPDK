@@ -41,13 +41,13 @@
 #define BURST_SIZE 2048
 #define MAX_RX_QUEUE_PER_PORT 128
 #define MAX_RX_DESC 4096
-#define RX_RING_SZ 65536*8
+#define RX_RING_SZ 65536*4
 #define FLOW_NUM 65536
 #define WRITE_FILE
 #define MAX_LCORE_PARAMS 1024
 #define MAX_RX_QUEUE_PER_LCORE 16
 
-#define SD
+//#define SD
 //#define IPG
 
 #ifdef SD
@@ -126,7 +126,7 @@ static void set_affinity(void)
         attr.sched_priority = 0;
 
         attr.sched_policy = SCHED_DEADLINE;
-        attr.sched_runtime = 1000*1000;
+        attr.sched_runtime = 2000*1000;
         attr.sched_period = attr.sched_deadline = 2000*1000;
 
         ret = sched_setattr(0, &attr, flags);
@@ -162,7 +162,7 @@ static struct rte_timer timer;
 
 struct rte_eth_rxconf rx_conf;
 
-uint64_t gCtr[RX_RINGS];
+uint64_t *gCtr; //[RX_RINGS];
 
 #ifdef IPG
 static uint64_t global = 0;
@@ -316,7 +316,7 @@ static void timer_cb(__attribute__((unused)) struct rte_timer *tim,
 	if (!rte_eth_timesync_read_rx_timestamp(2, &tstamp, 0))
 		puts("Timestamp detected...");
 
-	for(i=0; i<RX_RINGS; i++)
+	for(i=0; i< n_tx_thread; i++)
 		j += gCtr[i];
 
 //	printf("RX rate: %.2lf Mpps, Total RX pkts: %.0lf, Total dropped pkts: %lu\n",
@@ -880,7 +880,7 @@ static void handler(int sig)
 				eth_stats.imissed, eth_stats.ierrors);
 
 		uint64_t sum = 0;
- 	        for(i=0; i<RX_RINGS; i++)
+ 	        for(i=0; i<n_rx_thread; i++)
  	        {
 			sum += gCtr[i];
 	                printf("\nQueue %d counter's value: %lu\n", i, gCtr[i]);
@@ -945,6 +945,8 @@ int main(int argc, char **argv)
 	uint32_t nb_lcores, nb_ports;
 	uint8_t portid, qid;
 
+	gCtr =  (uint64_t *)calloc(n_tx_thread, sizeof(int64_t));
+
 	signal(SIGINT, handler);
 
 	int ret = rte_eal_init(argc, argv);
@@ -1000,12 +1002,6 @@ int main(int argc, char **argv)
 	nb_ports = rte_eth_dev_count();
 	printf("The number of ports is %u\n", nb_ports);
 
-/*
-#ifdef SD
-	set_affinity();
-#endif
-*/
-
 	for (portid = 0; portid < nb_ports; portid++)
 	{
 		if ((enabled_port_mask & (1 << portid)) == 0)
@@ -1018,12 +1014,12 @@ int main(int argc, char **argv)
 		printf("\nInitialize port %d ...\n", portid);
 		fflush(stdout);
 
-		ret = rte_eth_dev_configure(portid, (uint16_t)nb_rxq, 0, &port_conf);
+		ret = rte_eth_dev_configure(portid, (uint16_t)n_rx_thread, 0, &port_conf);
 		if (ret < 0)
 			rte_exit(EXIT_FAILURE, "Cannot configure device: err=%d,"
-					"port=%d, rxq=%d\n", ret, portid, nb_rxq);
+					"port=%d, rxq=%d\n", ret, portid, n_rx_thread);
 
-		for (qid = 0; qid < nb_rxq; qid++)
+		for (qid = 0; qid < n_rx_thread; qid++)
 		{
 			ret = rte_eth_rx_queue_setup(portid, qid, nb_rx_desc,
 					rte_eth_dev_socket_id(portid), &rx_conf, mbuf_pool);
@@ -1070,10 +1066,6 @@ int main(int argc, char **argv)
 
 	rte_eal_mp_remote_launch(pthread_run, NULL, SKIP_MASTER);
 
-/*	pthread_t a, b;
-	pthread_create(&a, NULL, &lcore_main_rx, &rx_thread[0]);
-	pthread_create(&b, NULL, &lcore_main_rx, &rx_thread[1]);
-*/
 	while(1)
 		rte_timer_manage();
 

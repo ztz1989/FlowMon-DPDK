@@ -24,7 +24,7 @@
 #include <rte_log.h>
 #include <lthread_api.h>
 
-#define RX_RINGS 2
+#define RX_RINGS 4
 #define PORT_ID 2
 
 #ifndef __GLIBC__ /* sched_getcpu() is glibc specific */
@@ -43,7 +43,7 @@ static uint64_t global = 0;
 struct rte_eth_rxconf rx_conf;
 
 #define MEMPOOL_CACHE_SIZE 256
-#define MAX_PKT_BURST     32
+#define MAX_PKT_BURST     64
 #define BURST_TX_DRAIN_US 100
 
 #define RTE_RX_DESC_DEFAULT 4096
@@ -559,7 +559,7 @@ init_rx_rings(void)
 		snprintf(name, sizeof(name), "app_ring_s%u_rx%u_tx%u",
 				socket_io, rx_thread_id, tx_thread_id);
 
-		ring = rte_ring_create(name, 4096*16*8, socket_io,
+		ring = rte_ring_create(name, 65536*4, socket_io,
 				RING_F_SP_ENQ | RING_F_SC_DEQ);
 
 		if (ring == NULL)
