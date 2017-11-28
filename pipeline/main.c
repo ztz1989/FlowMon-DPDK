@@ -126,8 +126,8 @@ static void set_affinity(void)
         attr.sched_priority = 0;
 
         attr.sched_policy = SCHED_DEADLINE;
-        attr.sched_runtime = 2000*1000;
-        attr.sched_period = attr.sched_deadline = 2000*1000;
+        attr.sched_runtime = 1000*1000;
+        attr.sched_period = attr.sched_deadline = 2*1000*1000;
 
         ret = sched_setattr(0, &attr, flags);
         if (ret < 0) {
@@ -799,8 +799,9 @@ lcore_main_px(__attribute__((unused)) void *dummy)
                         continue;
 		gCtr[q] += nb_rx;
 
-		for (buf = 0; buf < nb_rx; buf++)
-			rte_pktmbuf_free(bufs[buf]);
+//		for (buf = 0; buf < nb_rx; buf++)
+//			rte_pktmbuf_free(bufs[buf]);
+
 		/* Per packet processing */
                 for (buf = 0; buf < nb_rx; buf++)
                 {

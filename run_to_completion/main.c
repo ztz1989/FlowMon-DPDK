@@ -826,7 +826,7 @@ port_init(uint8_t port, struct rte_mempool *mbuf_pool)
         rx_conf.rx_thresh.pthresh = 8;
         rx_conf.rx_thresh.hthresh = 8;
         rx_conf.rx_thresh.wthresh = 0;
-	rx_conf.rx_free_thresh = 32;
+	rx_conf.rx_free_thresh = 2048;
         rx_conf.rx_drop_en = 0;
 
 	#ifdef DOUBLE_HASH
@@ -996,7 +996,7 @@ void handler(int sig)
 
 	for (i = 0; i < FLOW_NUM; i++)
 	{
-		//printf("Flow entry %d: ", i);
+//		printf("Flow entry %d: ", i);
 		if (pkt_ctr[i].ctr[0] > 0)
 		{
 			flows+=1;
@@ -1009,7 +1009,7 @@ void handler(int sig)
 			sum += pkt_ctr[i].ctr[1];
 		}
 
-		//printf("%u: %u  %u: %u  ", pkt_ctr[i].hi_f1, pkt_ctr[i].ctr[0], pkt_ctr[i].hi_f2, pkt_ctr[i].ctr[1]);
+//		printf("%u: %u  %u: %u  ", pkt_ctr[i].hi_f1, pkt_ctr[i].ctr[0], pkt_ctr[i].hi_f2, pkt_ctr[i].ctr[1]);
 		f = pkt_ctr[i].flows;
 		while (f != NULL)
 		{
@@ -1019,7 +1019,7 @@ void handler(int sig)
 			//printf("%u: %u  ", f->rss_high, f->ctr);
 			f= f->next;
 		}
-		//printf("\n");
+//		printf("\n");
 	}
 
 	printf("[Double Hash + Linked-list]: %lu flows with %lu packets\n", flows, sum);

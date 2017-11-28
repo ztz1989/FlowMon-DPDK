@@ -24,8 +24,8 @@
 #include <rte_log.h>
 #include <lthread_api.h>
 
-#define RX_RINGS 4
-#define PORT_ID 2
+#define RX_RINGS 2
+#define PORT_ID 0
 
 #ifndef __GLIBC__ /* sched_getcpu() is glibc specific */
 #define sched_getcpu() rte_lcore_id()
@@ -184,6 +184,29 @@ struct thread_tx_conf {
 
 uint16_t n_tx_thread;
 struct thread_tx_conf tx_thread[MAX_TX_THREAD];
+
+#define FLOW_NUM 65536
+struct pkt_count
+{
+	uint16_t hi_f1;
+	uint16_t hi_f2;
+	uint32_t ctr[2];
+
+	#ifdef IPG
+        uint64_t ipg[2];
+	double  avg[2], stdDev[2];
+
+	#ifdef QUANTILE
+        struct quantile qt[2];
+        #endif
+
+        #endif
+
+	//struct flow_entry *flows;
+
+}__rte_cache_aligned;
+
+static struct pkt_count pkt_ctr[FLOW_NUM]__rte_cache_aligned;
 
 static void timer_cb(__attribute__((unused)) struct rte_timer *tim,
 			__attribute__((unused)) void *arg)
@@ -724,7 +747,7 @@ lthread_rx(void *dummy)
 
 			for (j = 0; j < nb_rx; j++)
 				rte_pktmbuf_free(pkts_burst[j]);
-			lthread_yield();
+			//lthread_yield();
 		}
 	}
 }
@@ -734,7 +757,8 @@ static void
 lthread_tx_per_ring(void *dummy)
 {
 	uint64_t nb_rx;
-	//uint8_t portid;
+	uint16_t index_l, index_h;
+	uint32_t buf;
 	struct rte_ring *ring;
 	struct thread_tx_conf *tx_conf;
 	struct rte_mbuf *pkts_burst[MAX_PKT_BURST];
@@ -759,16 +783,64 @@ lthread_tx_per_ring(void *dummy)
 		/*
 		 * Read packet from ring
 		 */
-		//SET_CPU_BUSY(tx_conf, CPU_POLL);
 		nb_rx = rte_ring_sc_dequeue_burst(ring, (void **)pkts_burst,
 				MAX_PKT_BURST, NULL);
-		//SET_CPU_IDLE(tx_conf, CPU_POLL);
-		re[tx_conf->conf.thread_id] += nb_rx;
+
+		// update the packet counter for a queue
+		//re[tx_conf->conf.thread_id] += nb_rx;
+
 		if (nb_rx > 0) {
-			//SET_CPU_BUSY(tx_conf, CPU_PROCESS);
-			//portid = pkts_burst[0]->port;
-			//process_burst(pkts_burst, nb_rx, portid);
-			//SET_CPU_IDLE(tx_conf, CPU_PROCESS);
+			// update the packet counter for a queue
+			re[tx_conf->conf.thread_id] += nb_rx;
+
+			for (buf=0; buf<nb_rx; buf++)
+			{
+				index_l = pkts_burst[buf]->hash.rss & 0xffff;
+				index_h = (pkts_burst[buf]->hash.rss & 0xffff0000)>>16;
+				rte_pktmbuf_free(pkts_burst[buf]);
+
+				if (pkt_ctr[index_l].hi_f1 == 0)
+				{
+					pkt_ctr[index_l].hi_f1 = index_h;
+					pkt_ctr[index_l].ctr[0]++;
+				}
+				else if (pkt_ctr[index_l].hi_f2 == 0 && pkt_ctr[index_l].hi_f1 != index_h)
+				{
+					pkt_ctr[index_l].hi_f2 = index_h;
+					pkt_ctr[index_l].ctr[1]++;
+
+					#ifdef IPG
+					pkt_ctr[index_l].avg[1] = pkt_ctr[index_l].ipg[1];
+					#endif
+				}
+				else
+				{
+					if(pkt_ctr[index_l].hi_f1 == index_h)
+					{
+						pkt_ctr[index_l].ctr[0]++;
+
+						#ifdef IPG
+						pkt_ctr[index_l].avg[0] =
+							((pkt_ctr[index_l].avg[0] * (pkt_ctr[index_l].ctr[0] - 1)) + (global - 1 - pkt_ctr[index_l].ipg[0]))/(float)pkt_ctr[index_l].ctr[0];
+
+						pkt_ctr[index_l].ipg[0] = global;
+						#endif
+					}
+					else if(pkt_ctr[index_l].hi_f2 == index_h)
+					{
+						pkt_ctr[index_l].ctr[1]++;
+
+						#ifdef IPG
+						pkt_ctr[index_l].avg[1] =
+							(pkt_ctr[index_l].avg[1] * (pkt_ctr[index_l].ctr[1] - 1) + global -
+								 1 - pkt_ctr[index_l].ipg[1])/(float)pkt_ctr[index_l].ctr[1];
+
+						pkt_ctr[index_l].ipg[1] = global;
+						#endif
+					}
+				}
+			}
+
 			lthread_yield();
 		} else
 			lthread_cond_wait(ready, 0);
@@ -963,7 +1035,7 @@ int main(int argc, char **argv)
 		}
 
 		/* init port */
-		printf("Initializing port %d ... ", portid);
+		printf("Initializing port %d ... \n", portid);
 		fflush(stdout);
 
 		nb_rx_queue = get_port_n_rx_queues(portid);

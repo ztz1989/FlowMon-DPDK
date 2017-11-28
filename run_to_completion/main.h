@@ -31,7 +31,7 @@
 #define BURST_SIZE 4096
 
 #define RX_RINGS 2
-#define PORT_ID 2
+#define PORT_ID 1
 
 /* 3 data structure macros*/
 
