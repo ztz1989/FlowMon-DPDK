@@ -162,6 +162,29 @@ static void set_scheduling_policy(void)
 }
 */
 
+const struct rte_fdir_conf fdir_conf = {
+		.mode = RTE_FDIR_MODE_PERFECT,
+		.pballoc = RTE_FDIR_PBALLOC_64K,
+		.status = RTE_FDIR_REPORT_STATUS_ALWAYS,
+		.mask = {
+			.vlan_tci_mask = 0x0,
+			.ipv4_mask = {
+				.src_ip = 0,
+				.dst_ip = 0,
+			},
+			.ipv6_mask = {
+				.src_ip = {0,0,0,0},
+				.dst_ip = {0,0,0,0},
+			},
+			.src_port_mask = 0,
+			.dst_port_mask = 0,
+			.mac_addr_byte_mask = 0,
+			.tunnel_type_mask = 0,
+			.tunnel_id_mask = 0,
+		},
+		.drop_queue = 63,
+};
+
 static const struct rte_eth_conf port_conf_default = {
         .rxmode = {
                 .mq_mode = ETH_MQ_RX_RSS,
@@ -180,6 +203,8 @@ static const struct rte_eth_conf port_conf_default = {
                         .rss_hf = ETH_RSS_PROTO_MASK,
                 }
         },
+//	.fdir_conf = fdir_conf,
+	.link_speeds = ETH_LINK_SPEED_10G,//ETH_LINK_SPEED_AUTONEG,
 };
 
 static void timer_cb(__attribute__((unused)) struct rte_timer *tim,

@@ -36,7 +36,7 @@
 #define MBUF_CACHE_SIZE 512
 #define RX_RINGS 2
 #define RX_RING_SIZE 4096
-#define PORT_ID 2
+#define PORT_ID 0
 #define PORT_MASK 0x4
 #define BURST_SIZE 2048
 #define MAX_RX_QUEUE_PER_PORT 128
@@ -48,7 +48,8 @@
 #define MAX_RX_QUEUE_PER_LCORE 16
 
 //#define SD
-//#define IPG
+#define HASH_LIST
+#define IPG
 
 #ifdef SD
 #define gettid() syscall(__NR_gettid)
@@ -323,7 +324,7 @@ static void timer_cb(__attribute__((unused)) struct rte_timer *tim,
 //						 (j - old)/1000000, j, eth_stats.imissed);
 
 	printf("RX: Total RX pkts: %.0lf, Total dropped pkts: %lu\n", j, eth_stats.imissed);
-/*	old = j;
+//	old = j;
 
 	#ifdef IPG
 		#ifdef LINKED_LIST
@@ -336,7 +337,7 @@ static void timer_cb(__attribute__((unused)) struct rte_timer *tim,
 			printf("[IPG] Average IPG: %.0lf, stdDev %lf\n", pkt_ctr[65246].avg[0], pkt_ctr[65246].stdDev[0]);
 		#endif
 	#endif
-*/
+
 }
 
 /* display usage */

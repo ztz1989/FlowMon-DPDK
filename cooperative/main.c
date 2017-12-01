@@ -24,7 +24,7 @@
 #include <rte_log.h>
 #include <lthread_api.h>
 
-#define RX_RINGS 2
+#define RX_RINGS 10
 #define PORT_ID 0
 
 #ifndef __GLIBC__ /* sched_getcpu() is glibc specific */
@@ -36,13 +36,9 @@
 static struct rte_timer timer;
 static uint64_t re[RX_RINGS];
 
-#ifdef IPG
-static uint64_t global = 0;
-#endif
-
 struct rte_eth_rxconf rx_conf;
 
-#define MEMPOOL_CACHE_SIZE 256
+#define MEMPOOL_CACHE_SIZE 512
 #define MAX_PKT_BURST     64
 #define BURST_TX_DRAIN_US 100
 
@@ -52,17 +48,20 @@ struct rte_eth_rxconf rx_conf;
 
 static uint16_t nb_rxd = RTE_RX_DESC_DEFAULT;
 
+//#define NB_MBUF 1023
+
 #define NB_MBUF RTE_MAX(\
 		(nb_ports*nb_rx_queue*RTE_RX_DESC_DEFAULT +       \
 		nb_ports*nb_lcores*MAX_PKT_BURST +                \
 		nb_lcores*MEMPOOL_CACHE_SIZE),                    \
-		(unsigned)8192)
+		(unsigned)8191)
 
 #define NB_SOCKETS 8
 
 static uint32_t enabled_port_mask;
 static int promiscuous_on; /**< Set in promiscuous mode off by default. */
 static int numa_on = 1;    /**< NUMA is enabled by default. */
+static int write = 0;   /*** Write the output to a temporary file **/
 
 struct rte_eth_rxconf rx_conf;
 static const struct rte_eth_conf port_conf = {
@@ -185,26 +184,125 @@ struct thread_tx_conf {
 uint16_t n_tx_thread;
 struct thread_tx_conf tx_thread[MAX_TX_THREAD];
 
+
+/* Macros related to the application*/
+
+/* 3 data structure macros*/
+#define DOUBLE_HASH
+//#define LINKED_LIST
+//#define HASH_LIST
 #define FLOW_NUM 65536
-struct pkt_count
-{
-	uint16_t hi_f1;
-	uint16_t hi_f2;
-	uint32_t ctr[2];
+#define IPG
+//#define QUANTILE
 
-	#ifdef IPG
-        uint64_t ipg[2];
-	double  avg[2], stdDev[2];
+#ifdef IPG
+static uint64_t global = 0;
+#endif
 
-	#ifdef QUANTILE
-        struct quantile qt[2];
-        #endif
+#ifdef QUANTILE
+	#define P 0.5
 
-        #endif
+	#define dn0 0
+	#define dn1 P/2
+	#define dn2 P
+	#define dn3 (P+1)/2
+	#define dn4 1
 
-	//struct flow_entry *flows;
+        struct quantile
+        {
+                double q[5];
+		int l;
+                int n[5];
+                float n1[5];
+		//float dn[5];
+        };
 
-}__rte_cache_aligned;
+        //static inline void get_qt(struct quantile qt, double x);
+	//static inline void insertSort(double n[]);
+#endif
+
+#ifdef DOUBLE_HASH
+	//static inline void double_hash(int);
+
+	struct pkt_count
+	{
+        	uint16_t hi_f1;
+	        uint16_t hi_f2;
+	        uint32_t ctr[3];
+
+		#ifdef IPG
+		uint64_t ipg[2];
+		double avg[2];
+		#endif
+
+	} __rte_cache_aligned;
+
+	static struct pkt_count pkt_ctr[FLOW_NUM]__rte_cache_aligned;
+
+#elif defined(LINKED_LIST)
+
+	#define ENTRY_PER_FLOW 2
+	static inline void linked_list(int);
+
+	struct flow_entry {
+		uint16_t rss_high;
+		uint32_t ctr;
+		struct flow_entry *next;
+
+		#ifdef IPG
+		uint64_t  ipg;
+		double avg;
+		#endif
+
+	}__rte_cache_aligned;
+
+	static struct flow_entry *flows[FLOW_NUM] __rte_cache_aligned;
+
+#elif defined(HASH_LIST)
+	#define ENTRY_PER_FLOW 1
+
+	static inline void hash_list(int);
+
+	struct flow_entry
+	{
+		uint16_t rss_high;
+                uint32_t ctr;
+                struct flow_entry *next;
+
+		#ifdef IPG
+                uint64_t ipg;
+		double avg, stdDev;
+
+		#ifdef QUANTILE
+		struct quantile qt;
+		#endif
+
+		#endif
+
+	}__rte_cache_aligned;
+
+	struct pkt_count
+	{
+		uint16_t hi_f1;
+		uint16_t hi_f2;
+		uint32_t ctr[2];
+
+		#ifdef IPG
+                uint64_t ipg[2];
+		double  avg[2], stdDev[2];
+
+		#ifdef QUANTILE
+                struct quantile qt[2];
+                #endif
+
+                #endif
+
+		struct flow_entry *flows;
+
+	}__rte_cache_aligned;
+
+	static struct pkt_count pkt_ctr[FLOW_NUM]__rte_cache_aligned;
+#endif
 
 static struct pkt_count pkt_ctr[FLOW_NUM]__rte_cache_aligned;
 
@@ -215,15 +313,33 @@ static void timer_cb(__attribute__((unused)) struct rte_timer *tim,
 	double j = 0;
 	static double old = 0;
 
-	for(i=0; i<RX_RINGS; i++)
+        int portid = PORT_ID, nb_ports = rte_eth_dev_count();
+
+        for (portid = 0; portid < nb_ports; portid++)
+                if ((enabled_port_mask & (1 << portid)) != 0)
+                        break;
+
+	for(i=0; i<n_rx_thread; i++)
 		j += re[i];
 
 	struct rte_eth_stats eth_stats;
-	rte_eth_stats_get(PORT_ID, &eth_stats);
+	rte_eth_stats_get(portid, &eth_stats);
 
 	printf("RX rate: %.2lf Mpps, Total RX pkts: %.0lf, Total dropped pkts: %lu\n",
 						 (j - old)/1000000, j, eth_stats.imissed);
 	old = j;
+
+	#ifdef IPG
+		#ifdef LINKED_LIST
+			printf("[IPG] Average IPG: %.0lf\n", flows[65246]->avg);
+		#endif
+		#ifdef DOUBLE_HASH
+			printf("[IPG] Average IPG: %.0lf\n", pkt_ctr[65246].avg[0]);
+		#endif
+		#ifdef HASH_LIST
+			printf("[IPG] Average IPG: %.0lf, stdDev %lf\n", pkt_ctr[65246].avg[0], pkt_ctr[65246].stdDev[0]);
+		#endif
+	#endif
 }
 
 static int
@@ -394,6 +510,7 @@ print_usage(const char *prgname)
 #define CMD_LINE_OPT_TX_CONFIG "tx"
 #define CMD_LINE_OPT_NO_NUMA "no-numa"
 #define CMD_LINE_OPT_ENABLE_JUMBO "enable-jumbo"
+#define CMD_LINE_OPT_FILE "write-file"
 
 /* Parse the argument given in the command line of the application */
 static int
@@ -409,6 +526,7 @@ parse_args(int argc, char **argv)
 		{CMD_LINE_OPT_TX_CONFIG, 1, 0, 0},
 		{CMD_LINE_OPT_NO_NUMA, 0, 0, 0},
 		{CMD_LINE_OPT_ENABLE_JUMBO, 0, 0, 0},
+		{CMD_LINE_OPT_FILE, 0, 0, 0},
 		{NULL, 0, 0, 0}
 	};
 
@@ -454,6 +572,10 @@ parse_args(int argc, char **argv)
 					return -1;
 				}
 			}
+
+			if (!strncmp(lgopts[option_index].name, CMD_LINE_OPT_FILE,
+				sizeof(CMD_LINE_OPT_FILE)))
+				write = 1;
 
 			if (!strncmp(lgopts[option_index].name, CMD_LINE_OPT_NO_NUMA,
 				sizeof(CMD_LINE_OPT_NO_NUMA))) {
@@ -630,6 +752,8 @@ init_mem(unsigned nb_mbuf)
 		else
 			socketid = 0;
 
+		//printf("Socket id for lcore %u is %d\n", lcore_id, socketid);
+
 		if (socketid >= NB_SOCKETS)
 			rte_exit(EXIT_FAILURE, "Socket %d of lcore %u is out of range %d\n",
 				socketid, lcore_id, NB_SOCKETS);
@@ -648,8 +772,33 @@ init_mem(unsigned nb_mbuf)
 				printf("Allocated mbuf pool on socket %d\n", socketid);
 		}
 	}
+
 	return 0;
 }
+
+/*
+static int
+init_mem1(unsigned nb_mbuf)
+{
+        unsigned queue_id;
+        char s[64];
+
+	for (queue_id=0; queue_id < n_rx_thread; queue_id++)
+	{
+		snprintf(s, sizeof(s), "mbuf_pool_%d", queue_id);
+//                pktmbuf_pool[queue_id] = rte_pktmbuf_pool_create(s, nb_mbuf,
+//              	MEMPOOL_CACHE_SIZE, 0, RTE_MBUF_DEFAULT_BUF_SIZE, queue_id);
+		pktmbuf_pool[queue_id] = rte_pktmbuf_pool_create(s, nb_mbuf/8,
+                      MEMPOOL_CACHE_SIZE/8, 0, RTE_MBUF_DEFAULT_BUF_SIZE, queue_id);
+
+                if (pktmbuf_pool[queue_id] == NULL)
+                        rte_exit(EXIT_FAILURE,
+                               	"Cannot init mbuf pool for queue %d, %d\n", queue_id, rte_errno);
+                else
+                        printf("Allocated mbuf pool for queue %d\n", queue_id);
+	}
+}
+*/
 
 /*
  * Null processing lthread loop
@@ -669,7 +818,7 @@ static void
 lthread_rx(void *dummy)
 {
 	int ret;
-	int nb_rx, j, k;
+	int nb_rx, k;
 	uint32_t i;
 	uint8_t portid, queueid;
 	int worker_id;
@@ -711,14 +860,11 @@ lthread_rx(void *dummy)
 			nb_rx = rte_eth_rx_burst(portid, queueid, pkts_burst,
 				MAX_PKT_BURST);
 
-//			re[queueid] += nb_rx;
-
 			if (nb_rx != 0)
 			{
 				worker_id = (worker_id + 1) % rx_conf->n_ring;
 				old_len = len[worker_id];
 
-				//SET_CPU_BUSY(rx_conf, CPU_PROCESS);
 				ret = rte_ring_sp_enqueue_burst(
 						rx_conf->ring[worker_id],
 						(void **) pkts_burst,
@@ -741,12 +887,11 @@ lthread_rx(void *dummy)
 						rte_pktmbuf_free(m);
 					}
 				}
-				//SET_CPU_IDLE(rx_conf, CPU_PROCESS);
 			}
 			lthread_yield();
 
-			for (j = 0; j < nb_rx; j++)
-				rte_pktmbuf_free(pkts_burst[j]);
+			//for (j = 0; j < nb_rx; j++)
+			//	rte_pktmbuf_free(pkts_burst[j]);
 			//lthread_yield();
 		}
 	}
@@ -764,6 +909,9 @@ lthread_tx_per_ring(void *dummy)
 	struct rte_mbuf *pkts_burst[MAX_PKT_BURST];
 	struct lthread_cond *ready;
 
+#ifdef IPG
+	int64_t curr;
+#endif
 	tx_conf = (struct thread_tx_conf *)dummy;
 	ring = tx_conf->ring;
 	ready = *tx_conf->ready;
@@ -793,6 +941,13 @@ lthread_tx_per_ring(void *dummy)
 			// update the packet counter for a queue
 			re[tx_conf->conf.thread_id] += nb_rx;
 
+			#ifdef IPG
+			unsigned qNum = n_rx_thread;
+			global = 0;
+			while (qNum > 0)
+				global += re[--qNum];
+			#endif
+
 			for (buf=0; buf<nb_rx; buf++)
 			{
 				index_l = pkts_burst[buf]->hash.rss & 0xffff;
@@ -803,6 +958,10 @@ lthread_tx_per_ring(void *dummy)
 				{
 					pkt_ctr[index_l].hi_f1 = index_h;
 					pkt_ctr[index_l].ctr[0]++;
+
+					#ifdef IPG
+                                        pkt_ctr[index_l].avg[0] = pkt_ctr[index_l].ipg[0];
+                                        #endif
 				}
 				else if (pkt_ctr[index_l].hi_f2 == 0 && pkt_ctr[index_l].hi_f1 != index_h)
 				{
@@ -820,8 +979,9 @@ lthread_tx_per_ring(void *dummy)
 						pkt_ctr[index_l].ctr[0]++;
 
 						#ifdef IPG
+						curr = global - 1 - pkt_ctr[index_l].ipg[0];
 						pkt_ctr[index_l].avg[0] =
-							((pkt_ctr[index_l].avg[0] * (pkt_ctr[index_l].ctr[0] - 1)) + (global - 1 - pkt_ctr[index_l].ipg[0]))/(float)pkt_ctr[index_l].ctr[0];
+							((pkt_ctr[index_l].avg[0] * (pkt_ctr[index_l].ctr[0] - 1)) + curr)/(float)pkt_ctr[index_l].ctr[0];
 
 						pkt_ctr[index_l].ipg[0] = global;
 						#endif
@@ -831,9 +991,9 @@ lthread_tx_per_ring(void *dummy)
 						pkt_ctr[index_l].ctr[1]++;
 
 						#ifdef IPG
+						curr = global - 1 - pkt_ctr[index_l].ipg[1];
 						pkt_ctr[index_l].avg[1] =
-							(pkt_ctr[index_l].avg[1] * (pkt_ctr[index_l].ctr[1] - 1) + global -
-								 1 - pkt_ctr[index_l].ipg[1])/(float)pkt_ctr[index_l].ctr[1];
+							(pkt_ctr[index_l].avg[1] * (pkt_ctr[index_l].ctr[1] - 1) + curr)/(float)pkt_ctr[index_l].ctr[1];
 
 						pkt_ctr[index_l].ipg[1] = global;
 						#endif
@@ -851,9 +1011,7 @@ static void
 lthread_tx(void *args)
 {
 	struct lthread *lt;
-
 	unsigned lcore_id;
-	//uint8_t portid;
 	struct thread_tx_conf *tx_conf;
 
 	tx_conf = (struct thread_tx_conf *)args;
@@ -893,7 +1051,6 @@ lthread_spawner(__rte_unused void *arg)
 	/*
 	 * Create producers (rx threads) on default lcore
 	 */
-
 	for (i = 0; i < n_rx_thread; i++) {
 		rx_thread[i].conf.thread_id = i;
 		lthread_create(&lt[n_thread], -1, lthread_rx,
@@ -960,21 +1117,61 @@ sched_spawner(__rte_unused void *arg) {
 
 static void handler(int sig)
 {
+	int i, flows = 0, portid = PORT_ID, nb_ports = rte_eth_dev_count();
+	uint64_t sum = 0;
 	printf("\nSignal %d received\n", sig);
 
+        for (portid = 0; portid < nb_ports; portid++)
+                if ((enabled_port_mask & (1 << portid)) != 0)
+                        break;
+
 	struct rte_eth_stats eth_stats;
-	rte_eth_stats_get(PORT_ID, &eth_stats);
+	rte_eth_stats_get(portid, &eth_stats);
 
-        printf("\nDPDK: Received pkts %lu \nDropped packets %lu \nErroneous packets %lu\n"
-	       "Counters %lu\t %lu\n",
+//	rte_eth_dev_stop(portid);
+
+        printf("[DPDK counting]: Received pkts %lu \nDropped packets %lu \nErroneous packets %lu\n",
 				eth_stats.ipackets + eth_stats.imissed + eth_stats.ierrors,
-				eth_stats.imissed, eth_stats.ierrors, re[0], re[1]);
+				eth_stats.imissed, eth_stats.ierrors);
+	printf("[Software counting]: ");
 
-	FILE *fp;
-	fp = fopen("tmp.txt", "a");
-	fprintf(fp, "%lu %lu %lu %lu\n", eth_stats.ipackets + eth_stats.imissed
-				 + eth_stats.ierrors, eth_stats.imissed, re[0], re[1]);
-	fclose(fp);
+	for (i = 0; i < n_rx_thread; i++)
+	{
+		printf("%lu ", re[i]);
+	}
+	printf("\n");
+
+	for (i = 0; i < FLOW_NUM; i++)
+	{
+//		printf("Flow entry %d: ", i);
+		if (pkt_ctr[i].ctr[0] > 0)
+		{
+			flows+=1;
+			sum += pkt_ctr[i].ctr[0];
+		}
+
+		if (pkt_ctr[i].ctr[1] > 0)
+		{
+			flows+=1;
+			sum += pkt_ctr[i].ctr[1];
+		}
+
+//		printf("%u: %u  %u: %u \n", pkt_ctr[i].hi_f1, pkt_ctr[i].ctr[0], pkt_ctr[i].hi_f2, pkt_ctr[i].ctr[1]);
+	}
+
+	printf("[Double Hash]: %d flows with %lu packets\n", flows, sum);
+
+	if (write == 1)
+	{
+		FILE *fp;
+		fp = fopen("tmp.txt", "a");
+		fprintf(fp, "%lu %lu ", eth_stats.ipackets + eth_stats.imissed
+					 + eth_stats.ierrors, eth_stats.imissed);
+		for (i = 0; i < n_rx_thread; i++)
+			fprintf(fp, "%lu ", re[i]);
+		fputs(" \n", fp);
+		fclose(fp);
+	}
 	exit(0);
 }
 
@@ -1064,6 +1261,27 @@ int main(int argc, char **argv)
 	rx_conf.rx_free_thresh = 2048;
         rx_conf.rx_drop_en = 0;
 
+	#ifdef DOUBLE_HASH
+
+	/* Initialize the corresponding data structure */
+	int j;
+
+	for(i=0; i< FLOW_NUM; i++)
+	{
+		pkt_ctr[i].hi_f1 = pkt_ctr[i].hi_f2 = 0;
+		for(j=0; j<=2; j++)
+		{
+			pkt_ctr[i].ctr[j] = 0;
+
+			#ifdef IPG
+			if (j == 2) break;
+			pkt_ctr[i].avg[j] = pkt_ctr[i].ipg[j] = 0;
+			#endif
+		}
+	}
+
+	#endif
+
 	for (i = 0; i < n_rx_thread; i++)
 	{
 		lcore_id = rx_thread[i].conf.lcore_id;
@@ -1095,7 +1313,7 @@ int main(int argc, char **argv)
 			ret = rte_eth_rx_queue_setup(portid, queueid, nb_rxd,
 					socketid,
 					&rx_conf,
-					pktmbuf_pool[socketid]);
+					pktmbuf_pool[queue]);
 			if (ret < 0)
 				rte_exit(EXIT_FAILURE, "rte_eth_rx_queue_setup: err=%d,"
 						"port=%d\n", ret, portid);
@@ -1104,7 +1322,7 @@ int main(int argc, char **argv)
 
 	printf("\n");
 
-	/* start ports */
+	/* Start the devices */
 	for (portid = 0; portid < nb_ports; portid++)
 	{
 		if ((enabled_port_mask & (1 << portid)) == 0)
