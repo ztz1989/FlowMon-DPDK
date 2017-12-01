@@ -11,6 +11,7 @@
 #include <errno.h>
 #include <getopt.h>
 #include <signal.h>
+#include <math.h>
 
 #include <rte_eal.h>
 #include <rte_ethdev.h>
@@ -191,13 +192,10 @@ struct thread_tx_conf tx_thread[MAX_TX_THREAD];
 #define DOUBLE_HASH
 //#define LINKED_LIST
 //#define HASH_LIST
+
 #define FLOW_NUM 65536
 #define IPG
 //#define QUANTILE
-
-#ifdef IPG
-static uint64_t global = 0;
-#endif
 
 #ifdef QUANTILE
 	#define P 0.5
@@ -217,8 +215,6 @@ static uint64_t global = 0;
 		//float dn[5];
         };
 
-        //static inline void get_qt(struct quantile qt, double x);
-	//static inline void insertSort(double n[]);
 #endif
 
 #ifdef DOUBLE_HASH
@@ -232,7 +228,7 @@ static uint64_t global = 0;
 
 		#ifdef IPG
 		uint64_t ipg[2];
-		double avg[2];
+		double avg[2], stdDev[2];
 		#endif
 
 	} __rte_cache_aligned;
@@ -250,7 +246,7 @@ static uint64_t global = 0;
 		struct flow_entry *next;
 
 		#ifdef IPG
-		uint64_t  ipg;
+		uint64_t ipg;
 		double avg;
 		#endif
 
@@ -334,7 +330,7 @@ static void timer_cb(__attribute__((unused)) struct rte_timer *tim,
 			printf("[IPG] Average IPG: %.0lf\n", flows[65246]->avg);
 		#endif
 		#ifdef DOUBLE_HASH
-			printf("[IPG] Average IPG: %.0lf\n", pkt_ctr[65246].avg[0]);
+			printf("[IPG] Average IPG: %.0lf, stdDev %lf\n", pkt_ctr[65246].avg[0], pkt_ctr[65246].stdDev[0]);
 		#endif
 		#ifdef HASH_LIST
 			printf("[IPG] Average IPG: %.0lf, stdDev %lf\n", pkt_ctr[65246].avg[0], pkt_ctr[65246].stdDev[0]);
@@ -776,7 +772,6 @@ init_mem(unsigned nb_mbuf)
 	return 0;
 }
 
-/*
 static int
 init_mem1(unsigned nb_mbuf)
 {
@@ -786,8 +781,8 @@ init_mem1(unsigned nb_mbuf)
 	for (queue_id=0; queue_id < n_rx_thread; queue_id++)
 	{
 		snprintf(s, sizeof(s), "mbuf_pool_%d", queue_id);
-//                pktmbuf_pool[queue_id] = rte_pktmbuf_pool_create(s, nb_mbuf,
-//              	MEMPOOL_CACHE_SIZE, 0, RTE_MBUF_DEFAULT_BUF_SIZE, queue_id);
+//              pktmbuf_pool[queue_id] = rte_pktmbuf_pool_create(s, nb_mbuf,
+//	              MEMPOOL_CACHE_SIZE, 0, RTE_MBUF_DEFAULT_BUF_SIZE, queue_id);
 		pktmbuf_pool[queue_id] = rte_pktmbuf_pool_create(s, nb_mbuf/8,
                       MEMPOOL_CACHE_SIZE/8, 0, RTE_MBUF_DEFAULT_BUF_SIZE, queue_id);
 
@@ -798,7 +793,6 @@ init_mem1(unsigned nb_mbuf)
                         printf("Allocated mbuf pool for queue %d\n", queue_id);
 	}
 }
-*/
 
 /*
  * Null processing lthread loop
@@ -889,10 +883,6 @@ lthread_rx(void *dummy)
 				}
 			}
 			lthread_yield();
-
-			//for (j = 0; j < nb_rx; j++)
-			//	rte_pktmbuf_free(pkts_burst[j]);
-			//lthread_yield();
 		}
 	}
 }
@@ -910,7 +900,7 @@ lthread_tx_per_ring(void *dummy)
 	struct lthread_cond *ready;
 
 #ifdef IPG
-	int64_t curr;
+	int64_t curr, global;
 #endif
 	tx_conf = (struct thread_tx_conf *)dummy;
 	ring = tx_conf->ring;
@@ -933,9 +923,6 @@ lthread_tx_per_ring(void *dummy)
 		 */
 		nb_rx = rte_ring_sc_dequeue_burst(ring, (void **)pkts_burst,
 				MAX_PKT_BURST, NULL);
-
-		// update the packet counter for a queue
-		//re[tx_conf->conf.thread_id] += nb_rx;
 
 		if (nb_rx > 0) {
 			// update the packet counter for a queue
@@ -960,7 +947,7 @@ lthread_tx_per_ring(void *dummy)
 					pkt_ctr[index_l].ctr[0]++;
 
 					#ifdef IPG
-                                        pkt_ctr[index_l].avg[0] = pkt_ctr[index_l].ipg[0];
+                                        pkt_ctr[index_l].avg[0] = pkt_ctr[index_l].ipg[0] = 0;
                                         #endif
 				}
 				else if (pkt_ctr[index_l].hi_f2 == 0 && pkt_ctr[index_l].hi_f1 != index_h)
@@ -969,7 +956,7 @@ lthread_tx_per_ring(void *dummy)
 					pkt_ctr[index_l].ctr[1]++;
 
 					#ifdef IPG
-					pkt_ctr[index_l].avg[1] = pkt_ctr[index_l].ipg[1];
+					pkt_ctr[index_l].avg[1] = pkt_ctr[index_l].ipg[1] = 0;
 					#endif
 				}
 				else
@@ -980,9 +967,12 @@ lthread_tx_per_ring(void *dummy)
 
 						#ifdef IPG
 						curr = global - 1 - pkt_ctr[index_l].ipg[0];
-						pkt_ctr[index_l].avg[0] =
-							((pkt_ctr[index_l].avg[0] * (pkt_ctr[index_l].ctr[0] - 1)) + curr)/(float)pkt_ctr[index_l].ctr[0];
 
+						pkt_ctr[index_l].stdDev[0] = sqrt(pow(curr - pkt_ctr[index_l].avg[0], 2));
+						pkt_ctr[index_l].avg[0] =
+							(pkt_ctr[index_l].avg[0] * (pkt_ctr[index_l].ctr[0] - 1) + curr)/(float)pkt_ctr[index_l].ctr[0];
+						if (pkt_ctr[index_l].avg[0] < 0)
+							printf("%lf %lu %lu %lu \n", pkt_ctr[index_l].avg[0], curr, global, pkt_ctr[index_l].ipg[0]);
 						pkt_ctr[index_l].ipg[0] = global;
 						#endif
 					}
@@ -992,6 +982,7 @@ lthread_tx_per_ring(void *dummy)
 
 						#ifdef IPG
 						curr = global - 1 - pkt_ctr[index_l].ipg[1];
+	                                        pkt_ctr[index_l].stdDev[1] = sqrt(pow(curr - pkt_ctr[index_l].avg[1], 2));
 						pkt_ctr[index_l].avg[1] =
 							(pkt_ctr[index_l].avg[1] * (pkt_ctr[index_l].ctr[1] - 1) + curr)/(float)pkt_ctr[index_l].ctr[1];
 
@@ -1130,7 +1121,7 @@ static void handler(int sig)
 
 //	rte_eth_dev_stop(portid);
 
-        printf("[DPDK counting]: Received pkts %lu \nDropped packets %lu \nErroneous packets %lu\n",
+        printf("[DPDK counting]: Received pkts %lu \n\tDropped packets %lu \n\tErroneous packets %lu\n",
 				eth_stats.ipackets + eth_stats.imissed + eth_stats.ierrors,
 				eth_stats.imissed, eth_stats.ierrors);
 	printf("[Software counting]: ");
@@ -1249,7 +1240,7 @@ int main(int argc, char **argv)
 				ret, portid);
 
 		/* init memory */
-		ret = init_mem(NB_MBUF);
+		ret = init_mem1(NB_MBUF);
 		if (ret < 0)
 			rte_exit(EXIT_FAILURE, "init_mem failed\n");
 	}
@@ -1313,7 +1304,7 @@ int main(int argc, char **argv)
 			ret = rte_eth_rx_queue_setup(portid, queueid, nb_rxd,
 					socketid,
 					&rx_conf,
-					pktmbuf_pool[queue]);
+					pktmbuf_pool[queueid]);
 			if (ret < 0)
 				rte_exit(EXIT_FAILURE, "rte_eth_rx_queue_setup: err=%d,"
 						"port=%d\n", ret, portid);
