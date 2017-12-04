@@ -215,6 +215,106 @@ struct thread_tx_conf tx_thread[MAX_TX_THREAD];
 		//float dn[5];
         };
 
+static inline void get_qt(struct quantile *qt, uint64_t x)
+{
+	int i, k, d;
+	double q1;
+
+	if (x > qt->q[2])
+	{
+		if (x < qt->q[3])
+			k = 2;
+		else if (x >= qt->q[3] && x <= qt->q[4])
+			k = 3;
+		else
+		{
+			qt->q[4] = x;
+			k = 3;
+		}
+	}
+	else
+	{
+		if (x >= qt->q[1])
+			k = 1;
+		else if (qt->q[0] <= x && x < qt->q[1])
+			k = 0;
+		else
+		{
+			qt->q[0] = x;
+			k = 0;
+		}
+	}
+
+	// increment positions of markers k+1 through 5
+	while (k<4)
+	{
+		qt->n[k+1]++;
+		k++;
+	}
+
+	// Update desired positions for all markers
+	qt->n1[0] += dn0;
+	qt->n1[1] += dn1;
+	qt->n1[2] += dn2;
+	qt->n1[3] += dn3;
+	qt->n1[4] += dn4;
+
+	// Adjust heights of markers 2-4 if necessary
+	for (i=1; i<=3; i++)
+	{
+		d = qt->n1[i] - qt->n[i];
+		if ((d>=1 && qt->n[i+1] - qt->n[i]>1) || (d<=-1 && qt->n[i-1] - qt->n[i]<-1))
+		{
+			d = d>0? 1: -1;
+			q1 = qt->q[i] + ((float)d/(qt->n[i+1] - qt->n[i-1])) *
+				 	(float)((qt->n[i] - qt->n[i-1]+d)*(qt->q[i+1] - qt->q[i])/(qt->n[i+1] - qt->n[i])
+					+ (qt->n[i+1]-qt->n[i]-d)*(qt->q[i]-qt->q[i-1])/(qt->n[i]-qt->n[i-1]));
+			if (q1 > qt->q[i-1] && q1 < qt->q[i+1])
+				qt->q[i] = q1;
+			else
+				qt->q[i] = qt->q[i] + d*(qt->q[i+d] - qt->q[i])/(qt->n[i+d]-qt->n[i]);
+
+			//printf("d=%d index %d %f\n", d, i, (float)d/(n[i+1]-n[i-1]));
+
+			qt->n[i] += d;
+		}
+	}
+}
+
+static inline void insertSort(double n[])
+{
+	int i, j, tmp;
+
+	for(i=1; i<5; i++)
+	{
+		j = i;
+		while (j>0 && n[j]<n[j-1])
+		{
+			tmp = n[j];
+			n[j] = n[j-1];
+			n[j-1] = tmp;
+
+			j--;
+		}
+	}
+}
+
+static inline
+void init(struct quantile *qt)
+{
+        qt->n[0] = 1;
+        qt->n[1] = 2;
+        qt->n[2] = 3;
+        qt->n[3] = 4;
+        qt->n[4] = 5;
+
+        qt->n1[0] = 1;
+        qt->n1[1] = 1 + 2*P;
+        qt->n1[2] = 1 + 4*P;
+        qt->n1[3] = 3 + 2*P;
+        qt->n1[4] = 5;
+}
+
 #endif
 
 #ifdef DOUBLE_HASH
@@ -229,6 +329,11 @@ struct thread_tx_conf tx_thread[MAX_TX_THREAD];
 		#ifdef IPG
 		uint64_t ipg[2];
 		double avg[2], stdDev[2];
+
+		#ifdef QUANTILE
+                struct quantile qt[2];
+                #endif
+
 		#endif
 
 	} __rte_cache_aligned;
@@ -974,6 +1079,21 @@ lthread_tx_per_ring(void *dummy)
 						if (pkt_ctr[index_l].avg[0] < 0)
 							printf("%lf %lu %lu %lu \n", pkt_ctr[index_l].avg[0], curr, global, pkt_ctr[index_l].ipg[0]);
 						pkt_ctr[index_l].ipg[0] = global;
+
+						#ifdef QUANTILE
+						if (pkt_ctr[index_l].qt[0].l < 5)
+							pkt_ctr[index_l].qt[0].q[pkt_ctr[index_l].qt[0].l++] = curr;
+
+						else
+						{
+							if (pkt_ctr[index_l].qt[0].l == 5)
+								insertSort(pkt_ctr[index_l].qt[0].q);
+								//printf("%lf\n", get_qt(pkt_ctr[index_l].qt[0], curr));
+							get_qt(&pkt_ctr[index_l].qt[0], curr);
+						}
+
+						#endif
+
 						#endif
 					}
 					else if(pkt_ctr[index_l].hi_f2 == index_h)
@@ -987,6 +1107,19 @@ lthread_tx_per_ring(void *dummy)
 							(pkt_ctr[index_l].avg[1] * (pkt_ctr[index_l].ctr[1] - 1) + curr)/(float)pkt_ctr[index_l].ctr[1];
 
 						pkt_ctr[index_l].ipg[1] = global;
+
+						#ifdef QUANTILE
+        	                                if (pkt_ctr[index_l].qt[1].l < 5)
+	                                                pkt_ctr[index_l].qt[1].q[pkt_ctr[index_l].qt[1].l++] = curr;
+
+                        	                else
+                        	                {
+                	                              if (pkt_ctr[index_l].qt[1].l == 5)
+                	                                        insertSort(pkt_ctr[index_l].qt[1].q);
+                	                                //printf("%lf\n", get_qt(pkt_ctr[index_l].qt[0], curr));
+                	                                get_qt(&pkt_ctr[index_l].qt[1], curr);
+                	                        }
+	    	                                #endif
 						#endif
 					}
 				}
@@ -1267,6 +1400,11 @@ int main(int argc, char **argv)
 			#ifdef IPG
 			if (j == 2) break;
 			pkt_ctr[i].avg[j] = pkt_ctr[i].ipg[j] = 0;
+
+			#ifdef QUANTILE
+			init(&pkt_ctr[i].qt[j]);
+			#endif
+
 			#endif
 		}
 	}

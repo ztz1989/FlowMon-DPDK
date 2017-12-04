@@ -10291,15 +10291,15 @@ per_lt          0x000000000094e598        0x8
 .debug_pubnames
  *(.debug_pubnames)
 
-.debug_info     0x0000000000000000    0x1b2c2
+.debug_info     0x0000000000000000    0x1b2c9
  *(.debug_info .gnu.linkonce.wi.*)
- .debug_info    0x0000000000000000     0x983d main.o
- .debug_info    0x000000000000983d     0x5067 lthread.o
- .debug_info    0x000000000000e8a4     0x44b8 lthread_sched.o
- .debug_info    0x0000000000012d5c     0x2b11 lthread_cond.o
- .debug_info    0x000000000001586d     0x271b lthread_tls.o
- .debug_info    0x0000000000017f88     0x2524 lthread_mutex.o
- .debug_info    0x000000000001a4ac      0xe16 lthread_diag.o
+ .debug_info    0x0000000000000000     0x9844 main.o
+ .debug_info    0x0000000000009844     0x5067 lthread.o
+ .debug_info    0x000000000000e8ab     0x44b8 lthread_sched.o
+ .debug_info    0x0000000000012d63     0x2b11 lthread_cond.o
+ .debug_info    0x0000000000015874     0x271b lthread_tls.o
+ .debug_info    0x0000000000017f8f     0x2524 lthread_mutex.o
+ .debug_info    0x000000000001a4b3      0xe16 lthread_diag.o
 
 .debug_abbrev   0x0000000000000000     0x2171
  *(.debug_abbrev)
@@ -10311,16 +10311,16 @@ per_lt          0x000000000094e598        0x8
  .debug_abbrev  0x0000000000001a51      0x3d8 lthread_mutex.o
  .debug_abbrev  0x0000000000001e29      0x348 lthread_diag.o
 
-.debug_line     0x0000000000000000     0x520d
+.debug_line     0x0000000000000000     0x520c
  *(.debug_line .debug_line.* .debug_line_end)
- .debug_line    0x0000000000000000     0x11d7 main.o
- .debug_line    0x00000000000011d7     0x133c lthread.o
- .debug_line    0x0000000000002513      0xf34 lthread_sched.o
- .debug_line    0x0000000000003447      0xa3b lthread_cond.o
- .debug_line    0x0000000000003e82      0x760 lthread_tls.o
- .debug_line    0x00000000000045e2      0x8bf lthread_mutex.o
- .debug_line    0x0000000000004ea1      0x36c lthread_diag.o
- .debug_line    0x000000000000520d        0x0 ctx.o
+ .debug_line    0x0000000000000000     0x11d6 main.o
+ .debug_line    0x00000000000011d6     0x133c lthread.o
+ .debug_line    0x0000000000002512      0xf34 lthread_sched.o
+ .debug_line    0x0000000000003446      0xa3b lthread_cond.o
+ .debug_line    0x0000000000003e81      0x760 lthread_tls.o
+ .debug_line    0x00000000000045e1      0x8bf lthread_mutex.o
+ .debug_line    0x0000000000004ea0      0x36c lthread_diag.o
+ .debug_line    0x000000000000520c        0x0 ctx.o
 
 .debug_frame
  *(.debug_frame)

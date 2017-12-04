@@ -36,7 +36,7 @@
 #define MBUF_CACHE_SIZE 512
 #define RX_RINGS 2
 #define RX_RING_SIZE 4096
-#define PORT_ID 0
+#define PORT_ID 3
 #define PORT_MASK 0x4
 #define BURST_SIZE 2048
 #define MAX_RX_QUEUE_PER_PORT 128
