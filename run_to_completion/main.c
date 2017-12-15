@@ -58,6 +58,7 @@ static uint64_t global = 0;
 #endif
 
 struct rte_eth_rxconf rx_conf;
+static struct rte_mempool *mbuf_pool[RX_RINGS];
 
 #ifdef SD
 
@@ -841,7 +842,7 @@ hash_list(int p)
  * coming from the mbuf_pool passed as a parameter.
  */
 static inline int
-port_init(uint8_t port, struct rte_mempool *mbuf_pool)
+port_init(uint8_t port)//, struct rte_mempool *mbuf_pool)
 {
 	struct rte_eth_conf port_conf = port_conf_default;
 	const uint16_t rx_rings = RX_RINGS, tx_rings = 0;
@@ -936,7 +937,7 @@ port_init(uint8_t port, struct rte_mempool *mbuf_pool)
 	/* Allocate and set up RX_RINGS RX queues per Ethernet port. */
 	for (q = 0; q < rx_rings; q++) {
 		retval = rte_eth_rx_queue_setup(port, q, RX_RING_SIZE,
-				rte_eth_dev_socket_id(port), &rx_conf, mbuf_pool);
+				rte_eth_dev_socket_id(port), &rx_conf, mbuf_pool[q]);
 		if (retval < 0)
 			return retval;
 	}
@@ -1075,9 +1076,10 @@ void handler(int sig)
 int
 main(int argc, char *argv[])
 {
-	struct rte_mempool *mbuf_pool;
+//	struct rte_mempool *mbuf_pool;
 	unsigned lcore_id;
-	uint8_t portid;
+	uint8_t portid, queueid;
+	char s[64];
 
 	signal(SIGINT, handler);
 
@@ -1098,17 +1100,27 @@ main(int argc, char *argv[])
 	argv += ret;
 
 	/* Creates a new mempool in memory to hold the mbufs. */
-	mbuf_pool = rte_pktmbuf_pool_create("MBUF_POOL", NUM_MBUFS*5,
-		MBUF_CACHE_SIZE, 0, RTE_MBUF_DEFAULT_BUF_SIZE, rte_socket_id());
+//	mbuf_pool = rte_pktmbuf_pool_create("MBUF_POOL", NUM_MBUFS*5,
+//		MBUF_CACHE_SIZE, 0, RTE_MBUF_DEFAULT_BUF_SIZE, rte_socket_id());
+
+	for(queueid=0; queueid<RX_RINGS; queueid++)
+	{
+		snprintf(s, sizeof(s), "mbuf_pool_%d", queueid);
+		mbuf_pool[queueid] = rte_pktmbuf_pool_create(s, 4600,
+		        MBUF_CACHE_SIZE, 0, RTE_MBUF_DEFAULT_BUF_SIZE, queueid);
+
+		if (mbuf_pool[queueid] == NULL)
+          	      rte_exit(EXIT_FAILURE, "Cannot create mbuf pool for queue %u\n", queueid);
+	}
 
 	printf("Mempool size %d\n", RTE_MEMPOOL_CACHE_MAX_SIZE);
 
-	if (mbuf_pool == NULL)
-		rte_exit(EXIT_FAILURE, "Cannot create mbuf pool\n");
+//	if (mbuf_pool == NULL)
+//		rte_exit(EXIT_FAILURE, "Cannot create mbuf pool\n");
 
 	/* Initialize all ports. */
 	portid = PORT_ID;
-	if (port_init(portid, mbuf_pool) != 0)
+	if (port_init(portid) != 0)
 		rte_exit(EXIT_FAILURE, "Cannot init port %"PRIu8 "\n", portid);
 
 	int queue_id = 0;

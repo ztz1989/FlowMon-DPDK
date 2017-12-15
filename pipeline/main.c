@@ -13,6 +13,7 @@
 #include <errno.h>
 #include <getopt.h>
 #include <unistd.h>
+#include <math.h>
 
 #include <linux/unistd.h>
 #include <linux/kernel.h>
@@ -37,7 +38,7 @@
 #define RX_RINGS 2
 #define RX_RING_SIZE 4096
 #define PORT_ID 3
-#define PORT_MASK 0x4
+#define PORT_MASK 0x8
 #define BURST_SIZE 2048
 #define MAX_RX_QUEUE_PER_PORT 128
 #define MAX_RX_DESC 4096
@@ -46,6 +47,8 @@
 #define WRITE_FILE
 #define MAX_LCORE_PARAMS 1024
 #define MAX_RX_QUEUE_PER_LCORE 16
+#define NB_SOCKETS 8
+#define NB_MBUF 8191
 
 //#define SD
 #define HASH_LIST
@@ -141,7 +144,7 @@ static void set_affinity(void)
 #endif
 
 /* mask of enabled ports. */
-uint32_t enabled_port_mask = 0x4;
+uint32_t enabled_port_mask = 0x8;
 
 /* number of rx queues, 2 by default. */
 uint8_t nb_rxq = RX_RINGS;
@@ -157,17 +160,13 @@ static unsigned promiscuous_on = 1;
 
 uint16_t n_rx_thread, n_tx_thread;
 
-//static struct rte_ring *rings[RX_RINGS];
-
 static struct rte_timer timer;
 
 struct rte_eth_rxconf rx_conf;
 
-uint64_t *gCtr; //[RX_RINGS];
+static struct rte_mempool *pktmbuf_pool[NB_SOCKETS];
 
-#ifdef IPG
-static uint64_t global = 0;
-#endif
+uint64_t *gCtr;
 
 static struct rte_eth_conf port_conf = {
 	.rxmode = {
@@ -211,8 +210,8 @@ struct rx_thread_params {
 
 static struct rx_thread_params rx_thread_params_array[MAX_LCORE_PARAMS];
 static struct rx_thread_params rx_thread_params_array_default[] = {
-	{2, 0, 1, 0},
-	{2, 1, 2, 1},
+	{3, 0, 2, 0},
+	{3, 1, 4, 1},
 };
 
 static struct rx_thread_params *rx_thread_params =
@@ -226,8 +225,8 @@ struct tx_thread_params {
 
 static struct tx_thread_params tx_thread_params_array[MAX_LCORE_PARAMS];
 static struct tx_thread_params tx_thread_params_array_default[] = {
-	{3, 0},
-	{4, 1},
+	{6, 0},
+	{8, 1},
 };
 
 static struct tx_thread_params *tx_thread_params =
@@ -278,7 +277,6 @@ struct thread_tx_conf {
 uint16_t n_tx_thread;
 struct thread_tx_conf tx_thread[MAX_TX_THREAD];
 
-
 struct pkt_count
 {
 	uint16_t hi_f1;
@@ -304,34 +302,38 @@ static struct pkt_count pkt_ctr[FLOW_NUM]__rte_cache_aligned;
 static void timer_cb(__attribute__((unused)) struct rte_timer *tim,
 			__attribute__((unused)) void *arg)
 {
-	uint8_t i;
+	uint8_t i, portid, nb_ports;
 	double j = 0;
-//	static double old = 0;
+
+	static double old = 0;
+        nb_ports = rte_eth_dev_count();
+        for (portid = 0; portid < nb_ports; portid++)
+                if ((enabled_port_mask & (1 << portid)) != 0)
+                        break;
 
 	struct rte_eth_stats eth_stats;
-	rte_eth_stats_get(PORT_ID, &eth_stats);
+	rte_eth_stats_get(portid, &eth_stats);
 
 	struct timespec tstamp;
 
-	// test the timestamping ability, may got removed in the future.
+	/* test the timestamping ability. This is a placeholder for future time-related features. */
 	if (!rte_eth_timesync_read_rx_timestamp(2, &tstamp, 0))
 		puts("Timestamp detected...");
 
-	for(i=0; i< n_tx_thread; i++)
+	for(i=0; i < n_rx_thread; i++)
 		j += gCtr[i];
 
-//	printf("RX rate: %.2lf Mpps, Total RX pkts: %.0lf, Total dropped pkts: %lu\n",
-//						 (j - old)/1000000, j, eth_stats.imissed);
+	printf("RX rate: %.2lf Mpps, Total RX pkts: %.0lf, Total dropped pkts: %lu\n",
+						 (j - old)/1000000, j, eth_stats.imissed);
 
-	printf("RX: Total RX pkts: %.0lf, Total dropped pkts: %lu\n", j, eth_stats.imissed);
-//	old = j;
+	old = j;
 
 	#ifdef IPG
 		#ifdef LINKED_LIST
 			printf("[IPG] Average IPG: %.0lf\n", flows[65246]->avg);
 		#endif
 		#ifdef DOUBLE_HASH
-			printf("[IPG] Average IPG: %.0lf\n", pkt_ctr[65246].avg[0]);
+			printf("[IPG] Average IPG: %.0lf, stdDev %lf\n", pkt_ctr[65246].avg[0], pkt_ctr[65246].stdDev[0]);
 		#endif
 		#ifdef HASH_LIST
 			printf("[IPG] Average IPG: %.0lf, stdDev %lf\n", pkt_ctr[65246].avg[0], pkt_ctr[65246].stdDev[0]);
@@ -749,6 +751,7 @@ lcore_main_rx(__attribute__((unused)) void *dummy)
 	rx_conf = (struct thread_rx_conf *)dummy;
 
 	q = rx_conf->rx_queue_list[0].queue_id;
+	port = rx_conf->rx_queue_list[0].port_id;
 
 #ifdef SD
         set_affinity();
@@ -759,7 +762,7 @@ lcore_main_rx(__attribute__((unused)) void *dummy)
 	/* Run until the application is quit or killed. */
 	for (;;)
 	{
-		port = PORT_ID;
+		//port = PORT_ID;
 		struct rte_mbuf *bufs[burst_size];
 
 		const uint16_t nb_rx = rte_eth_rx_burst(port, q,
@@ -772,8 +775,8 @@ lcore_main_rx(__attribute__((unused)) void *dummy)
                                 (void *)bufs, nb_rx, NULL);
 
 		/* Per packet processing */
-		for (buf = 0; buf < nb_rx; buf++)
-			rte_pktmbuf_free(bufs[buf]);
+		//for (buf = 0; buf < nb_rx; buf++)
+		//	rte_pktmbuf_free(bufs[buf]);
 	}
 }
 
@@ -789,6 +792,10 @@ lcore_main_px(__attribute__((unused)) void *dummy)
 	struct rte_mbuf *bufs[burst_size];
 	struct thread_tx_conf *tx_conf = (struct thread_tx_conf *)dummy;
 
+#ifdef IPG
+	int64_t curr, global;
+#endif
+
 	q = tx_conf->conf.thread_id;
 	printf("lcore %d dequeues queue %u\n", lcore_id, tx_conf->conf.thread_id);
 
@@ -798,10 +805,15 @@ lcore_main_px(__attribute__((unused)) void *dummy)
 		nb_rx = rte_ring_dequeue_burst(tx_conf->ring, (void *)bufs, burst_size, NULL);
 		if (unlikely(nb_rx == 0))
                         continue;
+
 		gCtr[q] += nb_rx;
 
-//		for (buf = 0; buf < nb_rx; buf++)
-//			rte_pktmbuf_free(bufs[buf]);
+		#ifdef IPG
+			unsigned qNum = n_rx_thread;
+			global = 0;
+			while (qNum > 0)
+				global += gCtr[--qNum];
+		#endif
 
 		/* Per packet processing */
                 for (buf = 0; buf < nb_rx; buf++)
@@ -810,6 +822,7 @@ lcore_main_px(__attribute__((unused)) void *dummy)
 			index_h = (bufs[buf]->hash.rss & 0xffff0000)>>16;
 
 			rte_pktmbuf_free(bufs[buf]);
+
 			if(pkt_ctr[index_l].hi_f1 == 0)
 			{
 				pkt_ctr[index_l].hi_f1 = index_h;
@@ -835,8 +848,11 @@ lcore_main_px(__attribute__((unused)) void *dummy)
 					pkt_ctr[index_l].ctr[0]++;
 
 					#ifdef IPG
+					curr = global - 1 - pkt_ctr[index_l].ipg[0];
+					pkt_ctr[index_l].stdDev[0] = sqrt(pow(curr - pkt_ctr[index_l].avg[0], 2));
+
 					pkt_ctr[index_l].avg[0] =
-						((pkt_ctr[index_l].avg[0] * (pkt_ctr[index_l].ctr[0] - 1)) + (global - 1 - pkt_ctr[index_l].ipg[0]))/(float)pkt_ctr[index_l].ctr[0];
+						((pkt_ctr[index_l].avg[0] * (pkt_ctr[index_l].ctr[0] - 1)) + curr)/(float)pkt_ctr[index_l].ctr[0];
 
 					pkt_ctr[index_l].ipg[0] = global;
 					#endif
@@ -846,9 +862,10 @@ lcore_main_px(__attribute__((unused)) void *dummy)
 					pkt_ctr[index_l].ctr[1]++;
 
 					#ifdef IPG
+					curr = global - 1 - pkt_ctr[index_l].ipg[1];
+	                                pkt_ctr[index_l].stdDev[1] = sqrt(pow(curr - pkt_ctr[index_l].avg[1], 2));
 					pkt_ctr[index_l].avg[1] =
-						(pkt_ctr[index_l].avg[1] * (pkt_ctr[index_l].ctr[1] - 1) + global -
-							 1 - pkt_ctr[index_l].ipg[1])/(float)pkt_ctr[index_l].ctr[1];
+						(pkt_ctr[index_l].avg[1] * (pkt_ctr[index_l].ctr[1] - 1) + curr)/(float)pkt_ctr[index_l].ctr[1];
 
 					pkt_ctr[index_l].ipg[1] = global;
 					#endif
@@ -866,17 +883,14 @@ static void handler(int sig)
 	printf("\nSignal %d received\n", sig);
 
         for (portid = 0; portid < rte_eth_dev_count(); portid++)
-        {
-                if ((enabled_port_mask & (1 << portid)) == 0)
-                        continue;
+	        if ((enabled_port_mask & (1 << portid)) != 0)
+                        break;
 
 		printf("statistics for port %d:\n", portid);
 
 		struct rte_eth_stats eth_stats;
 		rte_eth_stats_get(portid, &eth_stats);
 
-		puts("Stoping the device..\n");
-	        rte_eth_dev_stop(portid);
 	        printf("[DPDK]  Received pkts %lu \n\tDropped packets %lu \n\tErroneous packets %lu\n",
 				eth_stats.ipackets + eth_stats.imissed + eth_stats.ierrors,
 				eth_stats.imissed, eth_stats.ierrors);
@@ -893,7 +907,6 @@ static void handler(int sig)
 		sum = 0;
 		for(i=0; i<FLOW_NUM; i++)
 		{
-			//sum += pkt_ctr[i].ctr[0] < 100?0:1;
 			sum += pkt_ctr[i].ctr[1]?1:0 + pkt_ctr[i].ctr[0]?1:0;
 
 /*			if (pkt_ctr[i].ctr[0]!=0)
@@ -910,7 +923,6 @@ static void handler(int sig)
 	fclose(fp);
 	#endif
 
-	}
 	exit(1);
 }
 
@@ -946,8 +958,10 @@ int main(int argc, char **argv)
 	unsigned lcore_id;
 	uint32_t nb_lcores, nb_ports;
 	uint8_t portid, qid;
+	int i;
+	char s[64];
 
-	gCtr =  (uint64_t *)calloc(n_tx_thread, sizeof(int64_t));
+	gCtr =  (uint64_t *)calloc(n_rx_thread, sizeof(int64_t));
 
 	signal(SIGINT, handler);
 
@@ -987,15 +1001,16 @@ int main(int argc, char **argv)
 	lcore_id = rte_lcore_id();
 	rte_timer_reset(&timer, hz, PERIODICAL, lcore_id, timer_cb, NULL);
 
-	mbuf_pool = rte_pktmbuf_pool_create("MBUF_POOL", 524288-1,
+	mbuf_pool = rte_pktmbuf_pool_create("MBUF_POOL", 8192*2 - 1,
 			MBUF_CACHE_SIZE, 0, RTE_MBUF_DEFAULT_BUF_SIZE, rte_socket_id());
+
 	if (mbuf_pool == NULL)
 		rte_exit(EXIT_FAILURE, "Cannot create mbuf pool\n");
 
         rx_conf.rx_thresh.pthresh = 8;
         rx_conf.rx_thresh.hthresh = 8;
         rx_conf.rx_thresh.wthresh = 0;
-	rx_conf.rx_free_thresh = 32;
+	rx_conf.rx_free_thresh = 2048;
         rx_conf.rx_drop_en = 0;
 
 	nb_lcores = rte_lcore_count();
@@ -1023,6 +1038,17 @@ int main(int argc, char **argv)
 
 		for (qid = 0; qid < n_rx_thread; qid++)
 		{
+
+/*			snprintf(s, sizeof(s), "mbuf_pool_%d", qid);
+			pktmbuf_pool[qid] = rte_pktmbuf_pool_create(s, NB_MBUF,
+                        	MBUF_CACHE_SIZE/8, 0, RTE_MBUF_DEFAULT_BUF_SIZE, qid);
+
+        	        if (pktmbuf_pool[qid] == NULL)
+        	                rte_exit(EXIT_FAILURE,
+        	                       	"Cannot init mbuf pool for queue %d, %d\n", qid, rte_errno);
+	                else
+	                        printf("Allocated mbuf pool for queue %d\n", qid);
+*/
 			ret = rte_eth_rx_queue_setup(portid, qid, nb_rx_desc,
 					rte_eth_dev_socket_id(portid), &rx_conf, mbuf_pool);
 			if (ret < 0)
@@ -1055,16 +1081,8 @@ int main(int argc, char **argv)
 			rte_eth_promiscuous_enable(portid);
 	}
 
-	int i;
 	for (i=0; i<FLOW_NUM; i++)
-	{
 		pkt_ctr[i].ctr[0] = pkt_ctr[i].ctr[1] = 0;
-	}
-
-/*	RTE_LCORE_FOREACH_SLAVE(lcore_id)
-		rte_eal_remote_launch((lcore_function_t *)lcore_main_rx,
-					(void *)&rx_thread[lcore_id], lcore_id);
-*/
 
 	rte_eal_mp_remote_launch(pthread_run, NULL, SKIP_MASTER);
 

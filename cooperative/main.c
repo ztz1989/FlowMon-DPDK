@@ -194,7 +194,7 @@ struct thread_tx_conf tx_thread[MAX_TX_THREAD];
 //#define HASH_LIST
 
 #define FLOW_NUM 65536
-#define IPG
+//#define IPG
 //#define QUANTILE
 
 #ifdef QUANTILE
@@ -883,11 +883,14 @@ init_mem1(unsigned nb_mbuf)
         unsigned queue_id;
         char s[64];
 
+	printf("Size of nb_mubf %d\n", nb_mbuf);
+
 	for (queue_id=0; queue_id < n_rx_thread; queue_id++)
 	{
 		snprintf(s, sizeof(s), "mbuf_pool_%d", queue_id);
 //              pktmbuf_pool[queue_id] = rte_pktmbuf_pool_create(s, nb_mbuf,
 //	              MEMPOOL_CACHE_SIZE, 0, RTE_MBUF_DEFAULT_BUF_SIZE, queue_id);
+
 		pktmbuf_pool[queue_id] = rte_pktmbuf_pool_create(s, nb_mbuf/8,
                       MEMPOOL_CACHE_SIZE/8, 0, RTE_MBUF_DEFAULT_BUF_SIZE, queue_id);
 
@@ -1268,13 +1271,13 @@ static void handler(int sig)
 	for (i = 0; i < FLOW_NUM; i++)
 	{
 //		printf("Flow entry %d: ", i);
-		if (pkt_ctr[i].ctr[0] > 0)
+		if (pkt_ctr[i].ctr[0] > 100)
 		{
 			flows+=1;
 			sum += pkt_ctr[i].ctr[0];
 		}
 
-		if (pkt_ctr[i].ctr[1] > 0)
+		if (pkt_ctr[i].ctr[1] > 100)
 		{
 			flows+=1;
 			sum += pkt_ctr[i].ctr[1];
