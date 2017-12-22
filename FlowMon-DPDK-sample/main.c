@@ -3,7 +3,6 @@
  *
  *   Copyright(c) 2017
  *	   	Telecom ParisTech LINCS
- *		Alcatel-lucent Nokia Bell Labs
  *		Politecnico di Torino
  *
  *   All rights reserved.
