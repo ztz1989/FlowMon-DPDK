@@ -25,6 +25,8 @@
 #include <rte_log.h>
 #include <lthread_api.h>
 
+#include <ncurses.h>
+
 #define RX_RINGS 10
 #define PORT_ID 0
 
@@ -40,7 +42,7 @@ static uint64_t re[RX_RINGS];
 struct rte_eth_rxconf rx_conf;
 
 #define MEMPOOL_CACHE_SIZE 512
-#define MAX_PKT_BURST     64
+#define MAX_PKT_BURST     256
 #define BURST_TX_DRAIN_US 100
 
 #define RTE_RX_DESC_DEFAULT 4096
@@ -49,15 +51,16 @@ struct rte_eth_rxconf rx_conf;
 
 static uint16_t nb_rxd = RTE_RX_DESC_DEFAULT;
 
-//#define NB_MBUF 1023
-
+#define NB_MBUF 4096
+/*
 #define NB_MBUF RTE_MAX(\
 		(nb_ports*nb_rx_queue*RTE_RX_DESC_DEFAULT +       \
 		nb_ports*nb_lcores*MAX_PKT_BURST +                \
 		nb_lcores*MEMPOOL_CACHE_SIZE),                    \
 		(unsigned)8191)
+*/
 
-#define NB_SOCKETS 8
+#define NB_SOCKETS 4
 
 static uint32_t enabled_port_mask;
 static int promiscuous_on; /**< Set in promiscuous mode off by default. */
@@ -185,6 +188,8 @@ struct thread_tx_conf {
 uint16_t n_tx_thread;
 struct thread_tx_conf tx_thread[MAX_TX_THREAD];
 
+static int ring_loss = 0;
+static int batch_n[RX_RINGS];
 
 /* Macros related to the application*/
 
@@ -195,8 +200,41 @@ struct thread_tx_conf tx_thread[MAX_TX_THREAD];
 
 #define FLOW_NUM 65536
 //#define IPG
-//#define QUANTILE
 
+#ifdef NC
+static inline
+void init_gui(void)
+{
+        initscr();
+        cbreak();
+        keypad(stdscr, TRUE);
+        noecho();
+
+	start_color();			/* Start color */
+	init_pair(1, COLOR_YELLOW, COLOR_BLACK);
+}
+
+static inline
+void print_list(void)
+{
+	int x, y;
+	WINDOW *win;
+	char msg[] = "Statistics of FlowMon-DPDK";
+	int len = strlen(msg);
+
+	getmaxyx(stdscr, y, x);
+	win = newwin(4, 2*len, 1, y/2);
+
+	box(win, '|', '-');
+	attron(A_STANDOUT);
+	mvprintw(2, 0.75*y, msg);
+	attroff(A_STANDOUT);
+        touchwin(win);
+        wrefresh(win);
+}
+#endif
+
+//#define QUANTILE
 #ifdef QUANTILE
 	#define P 0.5
 
@@ -212,7 +250,6 @@ struct thread_tx_conf tx_thread[MAX_TX_THREAD];
 		int l;
                 int n[5];
                 float n1[5];
-		//float dn[5];
         };
 
 static inline void get_qt(struct quantile *qt, uint64_t x)
@@ -426,11 +463,35 @@ static void timer_cb(__attribute__((unused)) struct rte_timer *tim,
 	struct rte_eth_stats eth_stats;
 	rte_eth_stats_get(portid, &eth_stats);
 
-	printf("RX rate: %.2lf Mpps, Total RX pkts: %.0lf, Total dropped pkts: %lu\n",
+#ifdef NC
+	print_list();
+	mvprintw(10, 5, "RX rate: %.2lf Mpps, Total RX pkts: %.0lf, Total dropped pkts: %lu\n",
 						 (j - old)/1000000, j, eth_stats.imissed);
+#else
+	printf("RX rate: %.2lf Mpps, Total RX pkts: %.0lf, Total dropped pkts: %lu\n",
+                                                 (j - old)/1000000, j, eth_stats.imissed);
+#endif
 	old = j;
 
 	#ifdef IPG
+		#ifdef NC
+
+		printw("\n\tFlow id \tPkts \tIPG \tstdDev IPG\n");
+		for (i=0; i<20; i++)
+		{
+			printw("\t[Flow %d]: \t%lu, \t%.0lf, \t%lf\n", i+1, pkt_ctr[i].ctr[0], pkt_ctr[i].avg[0], pkt_ctr[i].stdDev[0]);
+		}
+
+		#else
+			printf("[IPG] Average IPG: %.0lf, stdDev %lf\n", pkt_ctr[65246].avg[0], pkt_ctr[65246].stdDev[0]);
+		#endif
+	#endif
+
+	#ifdef NC
+		refresh();
+	#endif
+
+/*	#ifdef IPG
 		#ifdef LINKED_LIST
 			printf("[IPG] Average IPG: %.0lf\n", flows[65246]->avg);
 		#endif
@@ -441,6 +502,7 @@ static void timer_cb(__attribute__((unused)) struct rte_timer *tim,
 			printf("[IPG] Average IPG: %.0lf, stdDev %lf\n", pkt_ctr[65246].avg[0], pkt_ctr[65246].stdDev[0]);
 		#endif
 	#endif
+*/
 }
 
 static int
@@ -836,6 +898,7 @@ get_port_n_rx_queues(const uint8_t port)
 	return (uint8_t)(++queue);
 }
 
+/*
 static int
 init_mem(unsigned nb_mbuf)
 {
@@ -876,6 +939,7 @@ init_mem(unsigned nb_mbuf)
 
 	return 0;
 }
+*/
 
 static int
 init_mem1(unsigned nb_mbuf)
@@ -883,16 +947,15 @@ init_mem1(unsigned nb_mbuf)
         unsigned queue_id;
         char s[64];
 
-	printf("Size of nb_mubf %d\n", nb_mbuf);
-
+	//printf("\nSize of nb_mubf %d, %lu\n", nb_mbuf, RTE_MBUF_DEFAULT_BUF_SIZE);
 	for (queue_id=0; queue_id < n_rx_thread; queue_id++)
 	{
 		snprintf(s, sizeof(s), "mbuf_pool_%d", queue_id);
 //              pktmbuf_pool[queue_id] = rte_pktmbuf_pool_create(s, nb_mbuf,
-//	              MEMPOOL_CACHE_SIZE, 0, RTE_MBUF_DEFAULT_BUF_SIZE, queue_id);
+//	                MEMPOOL_CACHE_SIZE, 0, RTE_MBUF_DEFAULT_BUF_SIZE, queue_id);
 
-		pktmbuf_pool[queue_id] = rte_pktmbuf_pool_create(s, nb_mbuf/8,
-                      MEMPOOL_CACHE_SIZE/8, 0, RTE_MBUF_DEFAULT_BUF_SIZE, queue_id);
+		pktmbuf_pool[queue_id] = rte_pktmbuf_pool_create(s, nb_mbuf,
+                	MEMPOOL_CACHE_SIZE/16, 0, RTE_MBUF_DEFAULT_BUF_SIZE, 0);
 
                 if (pktmbuf_pool[queue_id] == NULL)
                         rte_exit(EXIT_FAILURE,
@@ -962,8 +1025,11 @@ lthread_rx(void *dummy)
 			nb_rx = rte_eth_rx_burst(portid, queueid, pkts_burst,
 				MAX_PKT_BURST);
 
+//			batch_n[queueid]++;
+
 			if (nb_rx != 0)
 			{
+				batch_n[queueid]++;
 				worker_id = (worker_id + 1) % rx_conf->n_ring;
 				old_len = len[worker_id];
 
@@ -982,7 +1048,7 @@ lthread_rx(void *dummy)
 				len[worker_id] = new_len;
 
 				if (unlikely(ret < nb_rx)) {
-
+					ring_loss += nb_rx - ret;
 					for (k = ret; k < nb_rx; k++) {
 						struct rte_mbuf *m = pkts_burst[k];
 
@@ -1079,8 +1145,8 @@ lthread_tx_per_ring(void *dummy)
 						pkt_ctr[index_l].stdDev[0] = sqrt(pow(curr - pkt_ctr[index_l].avg[0], 2));
 						pkt_ctr[index_l].avg[0] =
 							(pkt_ctr[index_l].avg[0] * (pkt_ctr[index_l].ctr[0] - 1) + curr)/(float)pkt_ctr[index_l].ctr[0];
-						if (pkt_ctr[index_l].avg[0] < 0)
-							printf("%lf %lu %lu %lu \n", pkt_ctr[index_l].avg[0], curr, global, pkt_ctr[index_l].ipg[0]);
+						//if (pkt_ctr[index_l].avg[0] < 0)
+						//	printf("%lf %lu %lu %lu \n", pkt_ctr[index_l].avg[0], curr, global, pkt_ctr[index_l].ipg[0]);
 						pkt_ctr[index_l].ipg[0] = global;
 
 						#ifdef QUANTILE
@@ -1205,7 +1271,7 @@ lthread_spawner(__rte_unused void *arg)
 	}
 
 	/*
-	 * Wait for all threads finished
+	 * Wait for all threads to finish
 	 */
 	for (i = 0; i < n_thread; i++)
 		lthread_join(lt[i], NULL);
@@ -1242,11 +1308,17 @@ sched_spawner(__rte_unused void *arg) {
 	return 0;
 }
 
-static void handler(int sig)
+static void handler(int sig __rte_unused)
 {
 	int i, flows = 0, portid = PORT_ID, nb_ports = rte_eth_dev_count();
 	uint64_t sum = 0;
-	printf("\nSignal %d received\n", sig);
+
+#ifdef NC
+	print_list();
+	attron(A_STANDOUT);
+	mvprintw(10, 5, "Summary: \n");
+	attroff(A_STANDOUT);
+#endif
 
         for (portid = 0; portid < nb_ports; portid++)
                 if ((enabled_port_mask & (1 << portid)) != 0)
@@ -1257,27 +1329,46 @@ static void handler(int sig)
 
 //	rte_eth_dev_stop(portid);
 
-        printf("[DPDK counting]: Received pkts %lu \n\tDropped packets %lu \n\tErroneous packets %lu\n",
+	#ifdef NC
+	attron(A_BLINK | COLOR_PAIR(1));
+        printw("\t[DPDK counting]: Received pkts %lu \n\t\tDropped packets: %lu \n\t\tErroneous packets: %lu\n",
 				eth_stats.ipackets + eth_stats.imissed + eth_stats.ierrors,
 				eth_stats.imissed, eth_stats.ierrors);
-	printf("[Software counting]: ");
+	#else
+	printf("\t[DPDK counting]: Received pkts %lu \n\t\tDropped packets: %lu \n\t\tErroneous packets: %lu\n",
+                                eth_stats.ipackets + eth_stats.imissed + eth_stats.ierrors,
+                                eth_stats.imissed, eth_stats.ierrors);
+	#endif
+
+	#ifdef NC
+		printw("\t[Software counting]: ");
+	#else
+		printf("\t[Software counting]:");
+	#endif
 
 	for (i = 0; i < n_rx_thread; i++)
-	{
-		printf("%lu ", re[i]);
-	}
-	printf("\n");
+		#ifdef NC
+			printw("%lu(%lf) ", re[i], 1.0*re[i]/batch_n[i]);
+		#else
+			printf("%lu(%lf) ", re[i], 1.0*re[i]/batch_n[i]);
+		#endif
+
+	#ifdef NC
+		printw("\n");
+	#else
+		printf("\n");
+	#endif
 
 	for (i = 0; i < FLOW_NUM; i++)
 	{
 //		printf("Flow entry %d: ", i);
-		if (pkt_ctr[i].ctr[0] > 100)
+		if (pkt_ctr[i].ctr[0] > 0)
 		{
 			flows+=1;
 			sum += pkt_ctr[i].ctr[0];
 		}
 
-		if (pkt_ctr[i].ctr[1] > 100)
+		if (pkt_ctr[i].ctr[1] > 0)
 		{
 			flows+=1;
 			sum += pkt_ctr[i].ctr[1];
@@ -1286,7 +1377,22 @@ static void handler(int sig)
 //		printf("%u: %u  %u: %u \n", pkt_ctr[i].hi_f1, pkt_ctr[i].ctr[0], pkt_ctr[i].hi_f2, pkt_ctr[i].ctr[1]);
 	}
 
-	printf("[Double Hash]: %d flows with %lu packets\n", flows, sum);
+	#ifdef NC
+
+	printw("\t[In total]: %d flows with %d packets %d ring loss\n", flows, sum, ring_loss);
+	printw("\t[Total flows]: %d\n", flows);
+	refresh();
+	attroff(A_BLINK);
+
+        printw("\n\tFlow id \t Pkts \t IPG \t stdDev IPG\n");
+        for (i=0; i<20; i++)
+        {
+                printw("\t[Flow %d]: \t%lu, \t%.0lf, \t%lf\n", i+1, pkt_ctr[i].ctr[0], pkt_ctr[i].avg[0], pkt_ctr[i].stdDev[0]);
+        }
+
+	#else
+	printf("\t[In total]: %d flows with %lu packets %d ring loss\n", flows, sum, ring_loss);
+	#endif
 
 	if (write == 1)
 	{
@@ -1299,6 +1405,12 @@ static void handler(int sig)
 		fputs(" \n", fp);
 		fclose(fp);
 	}
+
+	#ifdef NC
+		getch();			/* Wait for user input */
+		endwin();			/* End curses mode */
+	#endif
+
 	exit(0);
 }
 
@@ -1349,6 +1461,10 @@ int main(int argc, char **argv)
 	uint64_t hz = rte_get_timer_hz();
 	lcore_id = rte_lcore_id();
 	rte_timer_reset(&timer, hz, PERIODICAL, lcore_id, timer_cb, NULL);
+
+	#ifdef NC
+		init_gui();
+	#endif
 
 	for (portid = 0; portid < nb_ports; portid++)
 	{
@@ -1446,6 +1562,7 @@ int main(int argc, char **argv)
 					socketid,
 					&rx_conf,
 					pktmbuf_pool[queueid]);
+
 			if (ret < 0)
 				rte_exit(EXIT_FAILURE, "rte_eth_rx_queue_setup: err=%d,"
 						"port=%d\n", ret, portid);
@@ -1474,6 +1591,7 @@ int main(int argc, char **argv)
 	lthread_num_schedulers_set(nb_lcores);
 	rte_eal_mp_remote_launch(sched_spawner, NULL, SKIP_MASTER);
 	lthread_master_spawner(NULL);
+
 
 	return 0;
 }

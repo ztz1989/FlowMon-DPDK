@@ -27,8 +27,8 @@
 #define WRITE_FILE   //option to write to a file
 
 #define NUM_MBUFS 8192
-#define MBUF_CACHE_SIZE 256
-#define BURST_SIZE 4096
+#define MBUF_CACHE_SIZE 512
+#define BURST_SIZE 256
 
 #define RX_RINGS 2
 #define PORT_ID 3
@@ -40,7 +40,7 @@
 #define HASH_LIST
 
 /* Parameters for per-flow stats */
-#define IPG
+//#define IPG
 
 //#define TIMESTAMP
 //#define DEBUG_FLOW

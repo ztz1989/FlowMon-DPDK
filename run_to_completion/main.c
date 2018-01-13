@@ -1,3 +1,4 @@
+
 /*
  *
  *
@@ -830,8 +831,8 @@ hash_list(int p)
 			}
 		}
 
-		//for (buf = 0; buf < nb_rx; buf++)
-		//	rte_pktmbuf_free(bufs[buf]);
+//		for (buf = 0; buf < nb_rx; buf++)
+//			rte_pktmbuf_free(bufs[buf]);
 	}
 }
 
@@ -1106,8 +1107,8 @@ main(int argc, char *argv[])
 	for(queueid=0; queueid<RX_RINGS; queueid++)
 	{
 		snprintf(s, sizeof(s), "mbuf_pool_%d", queueid);
-		mbuf_pool[queueid] = rte_pktmbuf_pool_create(s, 4600,
-		        MBUF_CACHE_SIZE, 0, RTE_MBUF_DEFAULT_BUF_SIZE, queueid);
+		mbuf_pool[queueid] = rte_pktmbuf_pool_create(s, 5000,
+		        MBUF_CACHE_SIZE, 0, RTE_MBUF_DEFAULT_BUF_SIZE, 0);
 
 		if (mbuf_pool[queueid] == NULL)
           	      rte_exit(EXIT_FAILURE, "Cannot create mbuf pool for queue %u\n", queueid);

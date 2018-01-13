@@ -39,7 +39,7 @@
 #define RX_RING_SIZE 4096
 #define PORT_ID 3
 #define PORT_MASK 0x8
-#define BURST_SIZE 2048
+#define BURST_SIZE 256
 #define MAX_RX_QUEUE_PER_PORT 128
 #define MAX_RX_DESC 4096
 #define RX_RING_SZ 65536*4
@@ -47,8 +47,8 @@
 #define WRITE_FILE
 #define MAX_LCORE_PARAMS 1024
 #define MAX_RX_QUEUE_PER_LCORE 16
-#define NB_SOCKETS 8
-#define NB_MBUF 8191
+#define NB_SOCKETS 4
+#define NB_MBUF 4096
 
 //#define SD
 #define HASH_LIST
