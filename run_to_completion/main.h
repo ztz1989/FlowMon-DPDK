@@ -25,7 +25,7 @@
 
 #define WRITE_FILE   //option to write to a file
 
-#define NUM_MBUFS 8192
+#define NUM_MBUFS 9000
 #define MBUF_CACHE_SIZE 512
 #define BURST_SIZE 256
 

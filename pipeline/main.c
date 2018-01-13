@@ -42,7 +42,7 @@
 #define BURST_SIZE 256
 #define MAX_RX_QUEUE_PER_PORT 128
 #define MAX_RX_DESC 4096
-#define RX_RING_SZ 65536*4
+#define RX_RING_SZ 65536
 #define FLOW_NUM 65536
 #define WRITE_FILE
 #define MAX_LCORE_PARAMS 1024
@@ -53,6 +53,7 @@
 //#define SD
 #define HASH_LIST
 #define IPG
+#define ENTRY_PER_FLOW 1
 
 #ifdef SD
 #define gettid() syscall(__NR_gettid)
@@ -277,6 +278,24 @@ struct thread_tx_conf {
 uint16_t n_tx_thread;
 struct thread_tx_conf tx_thread[MAX_TX_THREAD];
 
+struct flow_entry
+	{
+		uint16_t rss_high;
+                uint32_t ctr;
+                struct flow_entry *next;
+
+		#ifdef IPG
+                uint64_t ipg;
+		double avg, stdDev;
+
+		#ifdef QUANTILE
+		struct quantile qt;
+		#endif
+
+		#endif
+
+	}__rte_cache_aligned;
+
 struct pkt_count
 {
 	uint16_t hi_f1;
@@ -293,7 +312,7 @@ struct pkt_count
 
         #endif
 
-	//struct flow_entry *flows;
+	struct flow_entry *flows;
 
 }__rte_cache_aligned;
 
@@ -757,9 +776,8 @@ lcore_main_rx(__attribute__((unused)) void *dummy)
         set_affinity();
 #endif
 
-	printf("Setting: lcore %u checks queue %d\n", lcore_id, q);
+	printf("[Runtime settings]: lcore %u checks queue %d\n", lcore_id, q);
 
-	/* Run until the application is quit or killed. */
 	for (;;)
 	{
 		//port = PORT_ID;
@@ -791,6 +809,7 @@ lcore_main_px(__attribute__((unused)) void *dummy)
 	uint32_t buf;
 	struct rte_mbuf *bufs[burst_size];
 	struct thread_tx_conf *tx_conf = (struct thread_tx_conf *)dummy;
+	uint8_t hit;
 
 #ifdef IPG
 	int64_t curr, global;
@@ -798,6 +817,8 @@ lcore_main_px(__attribute__((unused)) void *dummy)
 
 	q = tx_conf->conf.thread_id;
 	printf("lcore %d dequeues queue %u\n", lcore_id, tx_conf->conf.thread_id);
+
+	struct flow_entry *f, *tmp;
 
 	for(;;)
 	{
@@ -870,6 +891,59 @@ lcore_main_px(__attribute__((unused)) void *dummy)
 					pkt_ctr[index_l].ipg[1] = global;
 					#endif
 				}
+				else
+				{
+					rte_prefetch0(pkt_ctr[index_l].flows);
+					f = pkt_ctr[index_l].flows;
+					hit = 0;
+					while (f != NULL)
+					{
+						if (f->rss_high == index_h)
+						{
+							f->ctr++;
+							hit = 1;
+
+							#ifdef IPG
+							curr = global - 1 - f -> ipg;
+							f -> stdDev = sqrt(pow(curr - (f -> avg), 2));
+                                		        f -> avg = (f -> avg * (f -> ctr - 1) + curr)/(float)(f -> ctr);
+                                        		#endif
+							break;
+
+						}
+						else if (f->rss_high == 0)
+                                                {
+                                                        f->rss_high = index_h;
+                                                        f->ctr++;
+                                                        hit = 1;
+
+                                                        #ifdef IPG
+                                                        f -> avg = global - 1 - f->ipg;
+                                                        f -> ipg = global;
+                                                        #endif
+                                                        break;
+                                                }
+						else
+						{
+							tmp = f;
+							f = f-> next;
+						}
+					}
+
+					// Online dynamic allocation.
+					if (unlikely(hit == 0))
+					{
+						f = (struct flow_entry *)rte_calloc("Flow entry", 1,
+                                        					sizeof(struct flow_entry), 0);
+						if (unlikely(f == NULL))
+                                		        rte_exit(EXIT_FAILURE, "flow bucket allocation failure\n");
+
+						f->rss_high = index_h;
+						f->ctr++;
+						f->next = NULL;
+						tmp->next = f;
+					}
+				}
 			}
                 }
 
@@ -905,15 +979,30 @@ static void handler(int sig)
 		printf("\nValue of global counter: %lu\n", sum);
 
 		sum = 0;
+		struct flow_entry *f;
+
 		for(i=0; i<FLOW_NUM; i++)
 		{
-			sum += pkt_ctr[i].ctr[1]?1:0 + pkt_ctr[i].ctr[0]?1:0;
+//			sum += pkt_ctr[i].ctr[1]>0?1:0 + pkt_ctr[i].ctr[0]>0?1:0;
 
-/*			if (pkt_ctr[i].ctr[0]!=0)
-				printf("flow %d: %u, %u\n", i, pkt_ctr[i].hi_f1, pkt_ctr[i].ctr[0]);
-			if (pkt_ctr[i].ctr[1]!=0)
-                                printf("%u\n", pkt_ctr[i].hi_f2, pkt_ctr[i].ctr[1]);
-*/		}
+			if (pkt_ctr[i].ctr[0]>0)
+				sum+=1;
+				//printf("flow %d: %u, %u\n", i, pkt_ctr[i].hi_f1, pkt_ctr[i].ctr[0]);
+			if (pkt_ctr[i].ctr[1]>0)
+				sum+=1;
+                                //printf("%u\n", pkt_ctr[i].hi_f2, pkt_ctr[i].ctr[1]);
+
+			f = pkt_ctr[i].flows;
+
+			while (f != NULL)
+			{
+				if (f->ctr > 0)
+					sum += 1;
+				//sum += f->ctr;
+				//printf("%u: %u  ", f->rss_high, f->ctr);
+				f= f->next;
+			}
+		}
 		printf("\nThe total number of flows is %lu\n", sum);
 
 	#ifdef WRITE_FILE
@@ -1001,16 +1090,16 @@ int main(int argc, char **argv)
 	lcore_id = rte_lcore_id();
 	rte_timer_reset(&timer, hz, PERIODICAL, lcore_id, timer_cb, NULL);
 
-	mbuf_pool = rte_pktmbuf_pool_create("MBUF_POOL", 8192*2 - 1,
+/*	mbuf_pool = rte_pktmbuf_pool_create("MBUF_POOL", 9000,
 			MBUF_CACHE_SIZE, 0, RTE_MBUF_DEFAULT_BUF_SIZE, rte_socket_id());
 
 	if (mbuf_pool == NULL)
 		rte_exit(EXIT_FAILURE, "Cannot create mbuf pool\n");
-
+*/
         rx_conf.rx_thresh.pthresh = 8;
         rx_conf.rx_thresh.hthresh = 8;
         rx_conf.rx_thresh.wthresh = 0;
-	rx_conf.rx_free_thresh = 2048;
+	rx_conf.rx_free_thresh = 32;
         rx_conf.rx_drop_en = 0;
 
 	nb_lcores = rte_lcore_count();
@@ -1039,18 +1128,18 @@ int main(int argc, char **argv)
 		for (qid = 0; qid < n_rx_thread; qid++)
 		{
 
-/*			snprintf(s, sizeof(s), "mbuf_pool_%d", qid);
-			pktmbuf_pool[qid] = rte_pktmbuf_pool_create(s, NB_MBUF,
-                        	MBUF_CACHE_SIZE/8, 0, RTE_MBUF_DEFAULT_BUF_SIZE, qid);
+			snprintf(s, sizeof(s), "mbuf_pool_%d", qid);
+			pktmbuf_pool[qid] = rte_pktmbuf_pool_create(s, 5000,
+                        	MBUF_CACHE_SIZE, 0, RTE_MBUF_DEFAULT_BUF_SIZE, 0);
 
         	        if (pktmbuf_pool[qid] == NULL)
         	                rte_exit(EXIT_FAILURE,
         	                       	"Cannot init mbuf pool for queue %d, %d\n", qid, rte_errno);
 	                else
 	                        printf("Allocated mbuf pool for queue %d\n", qid);
-*/
+
 			ret = rte_eth_rx_queue_setup(portid, qid, nb_rx_desc,
-					rte_eth_dev_socket_id(portid), &rx_conf, mbuf_pool);
+					rte_eth_dev_socket_id(portid), &rx_conf, pktmbuf_pool[qid]);
 			if (ret < 0)
 				rte_exit(EXIT_FAILURE, "Cannot setup queue %d\n", qid);
 
@@ -1081,9 +1170,41 @@ int main(int argc, char **argv)
 			rte_eth_promiscuous_enable(portid);
 	}
 
+	int j;
 	for (i=0; i<FLOW_NUM; i++)
-		pkt_ctr[i].ctr[0] = pkt_ctr[i].ctr[1] = 0;
+	{
+		pkt_ctr[i].hi_f1 = pkt_ctr[i].hi_f2 = 0;
 
+                for(j=0; j<2; j++)
+                {
+                        pkt_ctr[i].ctr[j] = 0;
+
+                        #ifdef IPG
+                        if (j == 2) break;
+                        pkt_ctr[i].avg[j] = pkt_ctr[i].ipg[j] = 0;
+
+			#ifdef QUANTILE
+			init(&pkt_ctr[i].qt[j]);
+			#endif
+
+                        #endif
+                }
+
+		j = ENTRY_PER_FLOW;
+
+		pkt_ctr[i].flows = (struct flow_entry *)rte_calloc("Flow entry", 1,
+                        	                sizeof(struct flow_entry), 0);
+
+		struct flow_entry *f = pkt_ctr[i].flows;
+
+		while (--j > 0)
+		{
+			f -> next = (struct flow_entry *)rte_calloc("Flow entry", 1,
+                	                        sizeof(struct flow_entry), 0);
+			f = f -> next;
+			f->next = NULL;
+		}
+	}
 	rte_eal_mp_remote_launch(pthread_run, NULL, SKIP_MASTER);
 
 	while(1)
