@@ -1,5 +1,5 @@
-# DPDK-FlowCount
-A DPDK software traffic monitor for per-flow statistics. We aim at providing the detailed statistics on both packet level and flow level. Specifically, DPDK-Flowcount aims at providing per-flow throughput, inter-packet gap and percentiles. 
+# FlowMon-DPDK
+A DPDK software traffic monitor for per-flow statistics. We aim at providing the detailed statistics on both packet level and flow level. Specifically, FlowMon-DPDK aims at providing per-flow throughput, inter-packet gap and percentiles. 
 
 ## About the APP: 
   * Adopted aversion of DPDK: 17.05 
