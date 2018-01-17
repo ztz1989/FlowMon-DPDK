@@ -1,4 +1,3 @@
-
 /*
  *
  *
@@ -448,8 +447,8 @@ double_hash(int p)
 			}
 		}
 
-		//for (buf = 0; buf < nb_rx; buf++)
-		//	rte_pktmbuf_free(bufs[buf]);
+//		for (buf = 0; buf < nb_rx; buf++)
+//			rte_pktmbuf_free(bufs[buf]);
 	}
 }
 
@@ -1070,8 +1069,7 @@ void handler(int sig)
 }
 
 /*
- * The main function, which does initialization and calls the per-lcore
- * functions.
+ * The main function, which does initialization and calls the per-lcore * functions.
  */
 int
 main(int argc, char *argv[])
@@ -1100,23 +1098,23 @@ main(int argc, char *argv[])
 	argv += ret;
 
 	/* Creates a new mempool in memory to hold the mbufs. */
-//	mbuf_pool = rte_pktmbuf_pool_create("MBUF_POOL", NUM_MBUFS*5,
-//		MBUF_CACHE_SIZE, 0, RTE_MBUF_DEFAULT_BUF_SIZE, rte_socket_id());
+	//mbuf_pool = rte_pktmbuf_pool_create("MBUF_POOL", NUM_MBUFS*2,
+	//	MBUF_CACHE_SIZE, 0, RTE_MBUF_DEFAULT_BUF_SIZE, rte_socket_id());
 
 	for(queueid=0; queueid<RX_RINGS; queueid++)
 	{
 		snprintf(s, sizeof(s), "mbuf_pool_%d", queueid);
 		mbuf_pool[queueid] = rte_pktmbuf_pool_create(s, 4096,
-		        MBUF_CACHE_SIZE, 0, RTE_MBUF_DEFAULT_BUF_SIZE, 0);
+		        MBUF_CACHE_SIZE, 0, RTE_MBUF_DEFAULT_BUF_SIZE, rte_socket_id());
 
 		if (mbuf_pool[queueid] == NULL)
           	      rte_exit(EXIT_FAILURE, "Cannot create mbuf pool for queue %u\n", queueid);
 	}
 
-	printf("Mempool size %d\n", RTE_MEMPOOL_CACHE_MAX_SIZE);
+	//printf("Mempool size %d\n", RTE_MEMPOOL_CACHE_MAX_SIZE);
 
-//	if (mbuf_pool == NULL)
-//		rte_exit(EXIT_FAILURE, "Cannot create mbuf pool\n");
+	//if (mbuf_pool == NULL)
+	//	rte_exit(EXIT_FAILURE, "Cannot create mbuf pool\n");
 
 	/* Initialize all ports. */
 	portid = PORT_ID;

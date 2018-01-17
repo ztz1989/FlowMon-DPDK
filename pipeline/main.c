@@ -51,8 +51,12 @@
 #define NB_MBUF 4096
 
 //#define SD
-#define HASH_LIST
-#define IPG
+
+#define DOUBLE_HASH
+//#define LINKED_LIST
+//#define HASH_LIST
+
+//#define IPG
 #define ENTRY_PER_FLOW 1
 
 #ifdef SD
@@ -278,6 +282,46 @@ struct thread_tx_conf {
 uint16_t n_tx_thread;
 struct thread_tx_conf tx_thread[MAX_TX_THREAD];
 
+#ifdef DOUBLE_HASH
+	static inline void double_hash(int);
+
+	struct pkt_count
+	{
+        	uint16_t hi_f1;
+	        uint16_t hi_f2;
+	        uint32_t ctr[3];
+
+		#ifdef IPG
+		uint64_t ipg[2];
+		double avg[2], stdDev[2];
+		#endif
+
+	} __rte_cache_aligned;
+
+	static struct pkt_count pkt_ctr[FLOW_NUM]__rte_cache_aligned;
+
+#endif
+
+#ifdef LINKED_LIST
+	#define ENTRY_PER_FLOW 2
+	static inline void linked_list(int);
+
+	struct flow_entry {
+		uint16_t rss_high;
+		uint32_t ctr;
+		struct flow_entry *next;
+
+		#ifdef IPG
+		uint64_t  ipg;
+		double avg, stdDev;
+		#endif
+
+	}__rte_cache_aligned;
+
+	static struct flow_entry *flows[FLOW_NUM] __rte_cache_aligned;
+#endif
+
+#ifdef HASH_LIST
 struct flow_entry
 	{
 		uint16_t rss_high;
@@ -317,6 +361,8 @@ struct pkt_count
 }__rte_cache_aligned;
 
 static struct pkt_count pkt_ctr[FLOW_NUM]__rte_cache_aligned;
+
+#endif
 
 static void timer_cb(__attribute__((unused)) struct rte_timer *tim,
 			__attribute__((unused)) void *arg)
@@ -760,7 +806,7 @@ static inline void
 lcore_main_rx(__attribute__((unused)) void *dummy)
 {
 	uint8_t port;
-	uint32_t buf;
+	//uint32_t buf;
 	int q;
 
 	unsigned lcore_id;
@@ -801,8 +847,9 @@ lcore_main_rx(__attribute__((unused)) void *dummy)
 /*
  * The lcore main. This is the main thread that does the per-flow statistics
  */
+#ifdef HASH_LIST
 static inline void
-lcore_main_px(__attribute__((unused)) void *dummy)
+lcore_main_count_hash_list(__attribute__((unused)) void *dummy)
 {
 	unsigned lcore_id = rte_lcore_id(), q;
 	uint16_t nb_rx, index_l, index_h;
@@ -949,6 +996,105 @@ lcore_main_px(__attribute__((unused)) void *dummy)
 
 	}
 }
+#endif
+
+#ifdef DOUBLE_HASH
+static inline void
+lcore_main_count_double_hash(__attribute__((unused)) void *dummy)
+{
+	unsigned lcore_id = rte_lcore_id(), q;
+	uint16_t nb_rx, index_l, index_h;
+	uint32_t buf;
+	struct rte_mbuf *bufs[burst_size];
+	struct thread_tx_conf *tx_conf = (struct thread_tx_conf *)dummy;
+	//uint8_t hit;
+
+#ifdef IPG
+	int64_t curr, global;
+#endif
+
+	q = tx_conf->conf.thread_id;
+	printf("lcore %d dequeues queue %u\n", lcore_id, tx_conf->conf.thread_id);
+
+	//struct flow_entry *f, *tmp;
+
+	for(;;)
+	{
+		//struct rte_mbuf *bufs[burst_size];
+		nb_rx = rte_ring_dequeue_burst(tx_conf->ring, (void *)bufs, burst_size, NULL);
+		if (unlikely(nb_rx == 0))
+                        continue;
+
+		gCtr[q] += nb_rx;
+
+		#ifdef IPG
+			unsigned qNum = n_rx_thread;
+			global = 0;
+			while (qNum > 0)
+				global += gCtr[--qNum];
+		#endif
+
+		/* Per packet processing */
+                for (buf = 0; buf < nb_rx; buf++)
+                {
+			index_l = bufs[buf]->hash.rss & 0xffff;
+			index_h = (bufs[buf]->hash.rss & 0xffff0000)>>16;
+
+			rte_pktmbuf_free(bufs[buf]);
+
+			if(pkt_ctr[index_l].hi_f1 == 0)
+			{
+				pkt_ctr[index_l].hi_f1 = index_h;
+				pkt_ctr[index_l].ctr[0]++;
+
+				#ifdef IPG
+				pkt_ctr[index_l].avg[0] = pkt_ctr[index_l].ipg[0];
+				#endif
+			}
+			else if(pkt_ctr[index_l].hi_f2 == 0 && pkt_ctr[index_l].hi_f1 != index_h)
+			{
+				pkt_ctr[index_l].hi_f2 = index_h;
+				pkt_ctr[index_l].ctr[1]++;
+
+				#ifdef IPG
+				pkt_ctr[index_l].avg[1] = pkt_ctr[index_l].ipg[1];
+				#endif
+			}
+			else
+			{
+				if(pkt_ctr[index_l].hi_f1 == index_h)
+				{
+					pkt_ctr[index_l].ctr[0]++;
+
+					#ifdef IPG
+					curr = global - 1 - pkt_ctr[index_l].ipg[0];
+					pkt_ctr[index_l].stdDev[0] = sqrt(pow(curr - pkt_ctr[index_l].avg[0], 2));
+
+					pkt_ctr[index_l].avg[0] =
+						((pkt_ctr[index_l].avg[0] * (pkt_ctr[index_l].ctr[0] - 1)) + curr)/(float)pkt_ctr[index_l].ctr[0];
+
+					pkt_ctr[index_l].ipg[0] = global;
+					#endif
+				}
+				else if(pkt_ctr[index_l].hi_f2 == index_h)
+				{
+					pkt_ctr[index_l].ctr[1]++;
+
+					#ifdef IPG
+					curr = global - 1 - pkt_ctr[index_l].ipg[1];
+	                                pkt_ctr[index_l].stdDev[1] = sqrt(pow(curr - pkt_ctr[index_l].avg[1], 2));
+					pkt_ctr[index_l].avg[1] =
+						(pkt_ctr[index_l].avg[1] * (pkt_ctr[index_l].ctr[1] - 1) + curr)/(float)pkt_ctr[index_l].ctr[1];
+
+					pkt_ctr[index_l].ipg[1] = global;
+					#endif
+				}
+			}
+                }
+
+	}
+}
+#endif
 
 static void handler(int sig)
 {
@@ -974,23 +1120,17 @@ static void handler(int sig)
  	        {
 			sum += gCtr[i];
 	                printf("\nQueue %d counter's value: %lu\n", i, gCtr[i]);
-			//rte_ring_free(rings[i]);
 	        }
 		printf("\nValue of global counter: %lu\n", sum);
 
 		sum = 0;
+		#ifdef HASH_LIST
 		struct flow_entry *f;
 
 		for(i=0; i<FLOW_NUM; i++)
 		{
-//			sum += pkt_ctr[i].ctr[1]>0?1:0 + pkt_ctr[i].ctr[0]>0?1:0;
-
-			if (pkt_ctr[i].ctr[0]>0)
-				sum+=1;
-				//printf("flow %d: %u, %u\n", i, pkt_ctr[i].hi_f1, pkt_ctr[i].ctr[0]);
-			if (pkt_ctr[i].ctr[1]>0)
-				sum+=1;
-                                //printf("%u\n", pkt_ctr[i].hi_f2, pkt_ctr[i].ctr[1]);
+			if (pkt_ctr[i].ctr[0]>0)	sum+=1;
+			if (pkt_ctr[i].ctr[1]>0)	sum+=1;
 
 			f = pkt_ctr[i].flows;
 
@@ -1003,6 +1143,17 @@ static void handler(int sig)
 				f= f->next;
 			}
 		}
+		#endif
+
+		#ifdef DOUBLE_HASH
+		for(i=0; i<FLOW_NUM; i++)
+                {
+                        if (pkt_ctr[i].ctr[0]>0)        sum+=1;
+                        if (pkt_ctr[i].ctr[1]>0)        sum+=1;
+                }
+
+		#endif
+
 		printf("\nThe total number of flows is %lu\n", sum);
 
 	#ifdef WRITE_FILE
@@ -1034,7 +1185,14 @@ pthread_run(__rte_unused void *arg)
 		if (tx_thread[i].conf.lcore_id == lcore_id)
 		{
 			printf("Start tx thread on %d...\n", lcore_id);
-			lcore_main_px((void *)&tx_thread[i]);
+#ifdef HASH_LIST
+			lcore_main_count_hash_list((void *)&tx_thread[i]);
+#endif
+
+#ifdef DOUBLE_HASH
+			lcore_main_count_double_hash((void *)&tx_thread[i]);
+#endif
+
 			return 0;
 		}
 
@@ -1043,7 +1201,7 @@ pthread_run(__rte_unused void *arg)
 
 int main(int argc, char **argv)
 {
-	struct rte_mempool *mbuf_pool;
+	//struct rte_mempool *mbuf_pool;
 	unsigned lcore_id;
 	uint32_t nb_lcores, nb_ports;
 	uint8_t portid, qid;
@@ -1169,7 +1327,37 @@ int main(int argc, char **argv)
 		if (promiscuous_on == 1)
 			rte_eth_promiscuous_enable(portid);
 	}
+#ifdef DOUBLE_HASH
+	/* Initialize the corresponding data structure */
+	int j;
 
+	for(i=0; i< FLOW_NUM; i++)
+	{
+		pkt_ctr[i].hi_f1 = pkt_ctr[i].hi_f2 = 0;
+		for(j=0; j<=2; j++)
+		{
+			pkt_ctr[i].ctr[j] = 0;
+
+			#ifdef IPG
+			if (j == 2) break;
+			pkt_ctr[i].avg[j] = pkt_ctr[i].ipg[j] = 0;
+			#endif
+		}
+	}
+#endif
+
+#ifdef LINKED_LIST
+
+	/* Dynamical allocation for the linked list data structure */
+	if (flow_struct_init(ENTRY_PER_FLOW) == -1)
+	{
+		printf("Flow struct initialization failure\n");
+		return -1;
+	}
+
+#endif
+
+#ifdef HASH_LIST
 	int j;
 	for (i=0; i<FLOW_NUM; i++)
 	{
@@ -1205,6 +1393,7 @@ int main(int argc, char **argv)
 			f->next = NULL;
 		}
 	}
+#endif
 	rte_eal_mp_remote_launch(pthread_run, NULL, SKIP_MASTER);
 
 	while(1)

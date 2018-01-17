@@ -199,7 +199,8 @@ static int batch_n[RX_RINGS];
 //#define HASH_LIST
 
 #define FLOW_NUM 65536
-//#define IPG
+#define IPG
+//#define NC
 
 #ifdef NC
 static inline
@@ -234,7 +235,7 @@ void print_list(void)
 }
 #endif
 
-//#define QUANTILE
+#define QUANTILE
 #ifdef QUANTILE
 	#define P 0.5
 

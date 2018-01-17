@@ -25,7 +25,7 @@
 
 #define WRITE_FILE   //option to write to a file
 
-#define NUM_MBUFS 9000
+#define NUM_MBUFS 4096
 #define MBUF_CACHE_SIZE 512
 #define BURST_SIZE 256
 
@@ -34,9 +34,9 @@
 
 /* 3 data structure macros*/
 
-//#define DOUBLE_HASH
+#define DOUBLE_HASH
 //#define LINKED_LIST
-#define HASH_LIST
+//#define HASH_LIST
 
 /* Parameters for per-flow stats */
 //#define IPG
