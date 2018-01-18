@@ -10165,7 +10165,7 @@ LOAD /usr/lib/gcc/x86_64-linux-gnu/5/../../../x86_64-linux-gnu/crtn.o
  *(.note.GNU-stack)
  *(.gnu_debuglink)
  *(.gnu.lto_*)
-OUTPUT(FlowCount elf64-x86-64)
+OUTPUT(FlowMon-DPDK elf64-x86-64)
 
 Cross Reference Table
 
@@ -10329,7 +10329,7 @@ _Jv_RegisterClasses                               /lib/x86_64-linux-gnu/libpthre
 _LIB_VERSION                                      /lib/x86_64-linux-gnu/libm.so.6
 _LIB_VERSION@@GLIBC_2.2.5                         /lib/x86_64-linux-gnu/libm.so.6
 _LIB_VERSION@GLIBC_2.2.5                          /lib/x86_64-linux-gnu/libm.so.6
-__GNU_EH_FRAME_HDR                                FlowCount
+__GNU_EH_FRAME_HDR                                FlowMon-DPDK
 __TMC_END__                                       /usr/lib/gcc/x86_64-linux-gnu/5/crtend.o
                                                   /usr/lib/gcc/x86_64-linux-gnu/5/crtbegin.o
 __after_morecore_hook                             /lib/x86_64-linux-gnu/libc.so.6
