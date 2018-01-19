@@ -163,6 +163,9 @@ uint16_t burst_size = BURST_SIZE;
 /* Set in promiscuous mode on by default. */
 static unsigned promiscuous_on = 1;
 
+/* Write the stats into a tmp file*/
+static unsigned write_on = 0;
+
 uint16_t n_rx_thread, n_tx_thread;
 
 static struct rte_timer timer;
@@ -198,7 +201,8 @@ enum {
 	CMD_LINE_OPT_BURST_SIZE,
 	CMD_LINE_OPT_CONFIG,
 	CMD_LINE_OPT_RX_CONFIG,
-	CMD_LINE_OPT_TX_CONFIG
+	CMD_LINE_OPT_TX_CONFIG,
+	CMD_LINE_OPT_FILE
 };
 
 struct lcore_rx_queue {
@@ -412,10 +416,10 @@ static void print_usage(const char *prgname)
 {
 	printf("%s [EAL options] --\n"\
 	        " -p  PORTMASK: hexadecimal bitmask of ports to configure\n"\
-		" -P: enable promiscuous mode\n"
+		" -P: promiscuous mode (Default on)\n"
 	        " --nb_rxq: Rx queues\n"\
-	        " --nb_rx_desc: The size of RX descriptors\n"\
-		" --burst_size: The reception batch size\n"\
+	        " --nb_rx_desc: The size of RX descriptors (default 4096)\n"\
+		" --burst_size: The reception batch size (default 256)\n"\
 		" [--rx (port,queue,lcore,thread)[,(port,queue,lcore,thread]]\n"
 		" [--tx (lcore,thread)[,(lcore,thread]]\n",
 	       prgname);
@@ -617,6 +621,7 @@ static int parse_args(int argc, char **argv)
 		{"nb_rxq", 1, 0, CMD_LINE_OPT_NB_RXQ_NUM},
 		{"nb_rx_desc", 1, 0, CMD_LINE_OPT_NB_RX_DESC},
 		{"burst_size", 1, 0,  CMD_LINE_OPT_BURST_SIZE},
+		{"write-file", 0, 0, CMD_LINE_OPT_FILE},
 		{"rx_conf", 1, 0, CMD_LINE_OPT_RX_CONFIG},
 		{"tx_conf", 1, 0, CMD_LINE_OPT_TX_CONFIG},
 		{NULL, 0, 0, 0}
@@ -690,6 +695,9 @@ static int parse_args(int argc, char **argv)
                                         print_usage(prgname);
                                         return -1;
 				}
+				break;
+			case CMD_LINE_OPT_FILE:
+				write_on = 1;
 				break;
 
 			default:
@@ -1156,12 +1164,13 @@ static void handler(int sig)
 
 		printf("\nThe total number of flows is %lu\n", sum);
 
-	#ifdef WRITE_FILE
-	FILE *fp;
-	fp = fopen("./tmp.txt", "a");
-	fprintf(fp, "%lu %lu %lu %lu %lu\n", eth_stats.ipackets + eth_stats.imissed + eth_stats.ierrors, eth_stats.imissed, gCtr[0], gCtr[1], sum);
-	fclose(fp);
-	#endif
+	if (write_on)
+	{
+		FILE *fp;
+		fp = fopen("./tmp.txt", "a");
+		fprintf(fp, "%lu %lu %lu %lu %lu\n", eth_stats.ipackets + eth_stats.imissed + eth_stats.ierrors, eth_stats.imissed, gCtr[0], gCtr[1], sum);
+		fclose(fp);
+	}
 
 	exit(1);
 }
@@ -1224,6 +1233,8 @@ int main(int argc, char **argv)
 	ret = parse_args(argc, argv);
 	if (ret < 0)
 		rte_exit(EXIT_FAILURE, "Wrong APP parameters\n");
+
+//	printf("Write file %u\n", write_on);
 
 	printf("Initializing rx-queues...\n");
 	ret = init_rx_queues();

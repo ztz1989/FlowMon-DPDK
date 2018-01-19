@@ -96,8 +96,8 @@ struct lcore_rx_queue {
 } __rte_cache_aligned;
 
 #define MAX_RX_QUEUE_PER_LCORE 16
-#define MAX_TX_QUEUE_PER_PORT  RTE_MAX_ETHPORTS
-#define MAX_RX_QUEUE_PER_PORT  128
+//#define MAX_TX_QUEUE_PER_PORT  RTE_MAX_ETHPORTS
+//#define MAX_RX_QUEUE_PER_PORT  128
 
 #define MAX_LCORE_PARAMS       1024
 struct rx_thread_params {
@@ -199,6 +199,7 @@ static int batch_n[RX_RINGS];
 //#define HASH_LIST
 
 #define FLOW_NUM 65536
+
 //#define IPG
 //#define NC
 

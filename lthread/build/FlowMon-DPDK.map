@@ -10314,38 +10314,38 @@ per_lt          0x000000000094e598        0x8
  .debug_abbrev  0x0000000000001a5a      0x3d8 lthread_mutex.o
  .debug_abbrev  0x0000000000001e32      0x348 lthread_diag.o
 
-.debug_line     0x0000000000000000     0x5177
+.debug_line     0x0000000000000000     0x515b
  *(.debug_line .debug_line.* .debug_line_end)
- .debug_line    0x0000000000000000     0x1141 main.o
- .debug_line    0x0000000000001141     0x133c lthread.o
- .debug_line    0x000000000000247d      0xf34 lthread_sched.o
- .debug_line    0x00000000000033b1      0xa3b lthread_cond.o
- .debug_line    0x0000000000003dec      0x760 lthread_tls.o
- .debug_line    0x000000000000454c      0x8bf lthread_mutex.o
- .debug_line    0x0000000000004e0b      0x36c lthread_diag.o
- .debug_line    0x0000000000005177        0x0 ctx.o
+ .debug_line    0x0000000000000000     0x113d main.o
+ .debug_line    0x000000000000113d     0x1338 lthread.o
+ .debug_line    0x0000000000002475      0xf30 lthread_sched.o
+ .debug_line    0x00000000000033a5      0xa37 lthread_cond.o
+ .debug_line    0x0000000000003ddc      0x75c lthread_tls.o
+ .debug_line    0x0000000000004538      0x8bb lthread_mutex.o
+ .debug_line    0x0000000000004df3      0x368 lthread_diag.o
+ .debug_line    0x000000000000515b        0x0 ctx.o
 
 .debug_frame
  *(.debug_frame)
 
-.debug_str      0x0000000000000000     0x4ae7
+.debug_str      0x0000000000000000     0x4ad5
  *(.debug_str)
- .debug_str     0x0000000000000000     0x39fc main.o
-                                       0x3f73 (size before relaxing)
- .debug_str     0x00000000000039fc      0x63e lthread.o
-                                        0xe67 (size before relaxing)
- .debug_str     0x000000000000403a      0x3c5 lthread_sched.o
-                                        0xf94 (size before relaxing)
- .debug_str     0x00000000000043ff       0x8e lthread_cond.o
-                                        0xbc9 (size before relaxing)
- .debug_str     0x000000000000448d      0x167 lthread_tls.o
-                                        0xe7a (size before relaxing)
- .debug_str     0x00000000000045f4      0x130 lthread_mutex.o
-                                        0xc37 (size before relaxing)
- .debug_str     0x0000000000004724      0x391 lthread_diag.o
-                                        0xd0e (size before relaxing)
- .debug_str     0x0000000000004ab5       0x32 ctx.o
-                                        0x2f7 (size before relaxing)
+ .debug_str     0x0000000000000000     0x39f8 main.o
+                                       0x3f6f (size before relaxing)
+ .debug_str     0x00000000000039f8      0x63c lthread.o
+                                        0xe63 (size before relaxing)
+ .debug_str     0x0000000000004034      0x3c3 lthread_sched.o
+                                        0xf90 (size before relaxing)
+ .debug_str     0x00000000000043f7       0x8c lthread_cond.o
+                                        0xbc5 (size before relaxing)
+ .debug_str     0x0000000000004483      0x165 lthread_tls.o
+                                        0xe76 (size before relaxing)
+ .debug_str     0x00000000000045e8      0x12e lthread_mutex.o
+                                        0xc33 (size before relaxing)
+ .debug_str     0x0000000000004716      0x38f lthread_diag.o
+                                        0xd0a (size before relaxing)
+ .debug_str     0x0000000000004aa5       0x30 ctx.o
+                                        0x2f5 (size before relaxing)
 
 .debug_loc      0x0000000000000000    0x26634
  *(.debug_loc)

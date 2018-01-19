@@ -1,4 +1,4 @@
-dep_main.o = /home/tzhang/Flowcount-DPDK/pthread/main.c \
+dep_main.o = /home/tzhang/FlowMon-DPDK/pthread/main.c \
  /usr/include/stdc-predef.h \
  /home/tzhang/dpdk-stable-17.05.1/x86_64-native-linuxapp-gcc/include/rte_config.h \
  /usr/include/stdio.h /usr/include/features.h \

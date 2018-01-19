@@ -10098,17 +10098,17 @@ LOAD /usr/lib/gcc/x86_64-linux-gnu/5/../../../x86_64-linux-gnu/crtn.o
  *(.debug_abbrev)
  .debug_abbrev  0x0000000000000000      0x67a main.o
 
-.debug_line     0x0000000000000000      0x7fa
+.debug_line     0x0000000000000000      0x7f8
  *(.debug_line .debug_line.* .debug_line_end)
- .debug_line    0x0000000000000000      0x7fa main.o
+ .debug_line    0x0000000000000000      0x7f8 main.o
 
 .debug_frame
  *(.debug_frame)
 
-.debug_str      0x0000000000000000     0x32d4
+.debug_str      0x0000000000000000     0x32d0
  *(.debug_str)
- .debug_str     0x0000000000000000     0x32d4 main.o
-                                       0x373c (size before relaxing)
+ .debug_str     0x0000000000000000     0x32d0 main.o
+                                       0x3738 (size before relaxing)
 
 .debug_loc      0x0000000000000000     0x22d0
  *(.debug_loc)

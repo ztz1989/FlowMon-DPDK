@@ -1,4 +1,4 @@
-dep_main.o = /home/tzhang/Flowcount-DPDK/lthread/main.c \
+dep_main.o = /home/tzhang/FlowMon-DPDK/lthread/main.c \
  /usr/include/stdc-predef.h \
  /home/tzhang/dpdk-stable-17.05.1/x86_64-native-linuxapp-gcc/include/rte_config.h \
  /usr/include/stdio.h /usr/include/features.h \
@@ -174,7 +174,7 @@ dep_main.o = /home/tzhang/Flowcount-DPDK/lthread/main.c \
  /home/tzhang/dpdk-stable-17.05.1/x86_64-native-linuxapp-gcc/include/rte_malloc.h \
  /home/tzhang/dpdk-stable-17.05.1/x86_64-native-linuxapp-gcc/include/rte_timer.h \
  /home/tzhang/dpdk-stable-17.05.1/x86_64-native-linuxapp-gcc/include/rte_string_fns.h \
- /home/tzhang/Flowcount-DPDK/common/lthread_api.h \
+ /home/tzhang/FlowMon-DPDK/common/lthread_api.h \
  /usr/include/x86_64-linux-gnu/sys/socket.h \
  /usr/include/x86_64-linux-gnu/sys/uio.h \
  /usr/include/x86_64-linux-gnu/bits/uio.h \
