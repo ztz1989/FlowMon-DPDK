@@ -5,44 +5,52 @@ local stats  = require "stats"
 local log    = require "log"
 local lm     = require "libmoon"
 
-local ft = {}
+ft = {}
 local FLOW_NUM = 65536
 
 for i = 1, FLOW_NUM do
-	ft[i-1] = 0
+	ft[i-1] = {}
 end
 
 function configure(parser)
 	parser:argument("rxDev", "The device to receive from"):convert(tonumber)
+	parser:option("--rxq", "The RX queue number"):default(2):convert(tonumber)
 end
 
 function master(args)
-	local rxDev = device.config{port = args.rxDev, rxQueues = 2, rssQueues = 2, dropEnable = false, rxDescs=4096}
+	local rxDev = device.config{port = args.rxDev, rxQueues = args.rxq, rssQueues = args.rxq, dropEnable = false, rxDescs=4096, numBufs=4500}
 	device.waitForLinks()
 	stats.startStatsTask{rxDevices={rxDev}}
-	for i = 1, 2 do
+	for i = 1, args.rxq do
 		lm.startTask("dumpSlave", rxDev, rxDev:getRxQueue(i-1))
 	end
 	lm.waitForTasks()
 
+	-- Query the NIC for Dev statistics
 	local f = io.open("tmp.txt", "a")
 	local stats = rxDev:getStats()
-	print("imissed: " .. tostring(stats.imissed))
+	print("Total missed packets: " .. tostring(stats.imissed))
 	f:write(tostring(stats.ipackets+stats.imissed) .. " " .. tostring(stats.imissed) .. "\n")
 	f:close()
 end
 
 function dumpSlave(rxDev, queue)
 	local bufs = memory.bufArray()
-	local pktCtr = stats:newPktRxCounter("Packets counted", "plain")
+	local pktCtr = stats:newPktRxCounter("Packets counted X", "plain")
 	
 	while lm.running() do		
-		local rx = queue:tryRecv(bufs, 100)
+		local rx = queue:tryRecv(bufs, 256)
 		for i = 1, rx do
 			local buf = bufs[i]
 			pktCtr:countPacket(buf)
-			index = bit.band(buf.hash.rss, 0xFFFF)
-			ft[index] = ft[index] + 1
+			hash_low = bit.band(buf.hash.rss, 0xFFFF)
+			hash_high = bit.rshift(bit.band(buf.hash.rss, 0xFFFF0000), 16)
+			
+			if ft[hash_low][hash_high] ~= nil then
+				ft[hash_low][hash_high] = ft[hash_low][hash_high] + 1
+			else
+				ft[hash_low][hash_high] = 1
+			end
 		end
 
 		bufs:free(rx)		
@@ -51,10 +59,12 @@ function dumpSlave(rxDev, queue)
 
 	pktCtr:finalize()
 
---[[        for i = 1, 100 do
-		if ft[i-1] ~= 0 then
-        		print(i .. ' ' .. ft[i-1])
+	for i = 0, 9 do
+--		io.write("Flow entry " .. i .. ': ')
+
+		for j,k in pairs(ft[i]) do
+			print(j .. ' ' .. k .. ' ')
 		end
-        end
---]]
+	end
+
 end
