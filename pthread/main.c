@@ -52,6 +52,9 @@
 
 //#define SD
 
+int bits, b1;
+uint32_t result = 0;
+
 #define DOUBLE_HASH
 //#define LINKED_LIST
 //#define HASH_LIST
@@ -1045,8 +1048,10 @@ lcore_main_count_double_hash(__attribute__((unused)) void *dummy)
 		/* Per packet processing */
                 for (buf = 0; buf < nb_rx; buf++)
                 {
-			index_l = bufs[buf]->hash.rss & 0xffff;
-			index_h = (bufs[buf]->hash.rss & 0xffff0000)>>16;
+			//index_l = bufs[buf]->hash.rss & 0xffff;
+			//index_h = (bufs[buf]->hash.rss & 0xffff0000)>>16;
+			index_l = bufs[buf]->hash.rss & result;
+			index_h = (bufs[buf]->hash.rss & b1)>>bits;
 
 			rte_pktmbuf_free(bufs[buf]);
 
@@ -1214,12 +1219,21 @@ int main(int argc, char **argv)
 	unsigned lcore_id;
 	uint32_t nb_lcores, nb_ports;
 	uint8_t portid, qid;
-	int i;
+	int i=0;
 	char s[64];
 
 	gCtr =  (uint64_t *)calloc(n_rx_thread, sizeof(int64_t));
 
 	signal(SIGINT, handler);
+
+	bits = log(FLOW_NUM)/log(2);
+	while (i<bits)
+	{
+		result |= (1<<i);
+		i++;
+	}
+
+	b1 = result << bits;
 
 	int ret = rte_eal_init(argc, argv);
 	if (ret < 0)

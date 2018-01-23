@@ -57,6 +57,8 @@
 
 #define WRITE_FILE
 
+#define SOFT
+
 static const struct rte_eth_conf port_conf_default = {
         .rxmode = {
                 .mq_mode = ETH_MQ_RX_RSS,
@@ -142,6 +144,10 @@ lcore_main(int p)
 
 	unsigned lcore_id;
 	lcore_id = rte_lcore_id();
+
+#ifdef SOFT
+	uint64_t i;
+#endif
 	printf("Setting: core %u checks queue %d\n", lcore_id, p);
 
 	/* Run until the application is quit or killed. */
@@ -155,6 +161,9 @@ lcore_main(int p)
 		if (unlikely(nb_rx == 0))
 			continue;
 
+#ifdef SOFT
+		i += nb_rx;
+#endif
 		for (buf = 0; buf < nb_rx; buf++)
 			rte_pktmbuf_free(bufs[buf]);
 	}
@@ -167,7 +176,7 @@ void handler(int sig)
 	// Get the statistics
 	struct rte_eth_stats eth_stats;
 	rte_eth_stats_get(PORT_ID, &eth_stats);
-        printf("\nReceived pkts %lu, %lu, %lu\n", eth_stats.ipackets + eth_stats.imissed + eth_stats.ierrors, eth_stats.imissed, eth_stats.ierrors);
+        printf("\nReceived pkts %" PRIu64 ", %lu, %lu\n", eth_stats.ipackets + eth_stats.imissed + eth_stats.ierrors, eth_stats.imissed, eth_stats.ierrors);
 
 	puts("Stoping the device..\n");
         rte_eth_dev_stop(PORT_ID);

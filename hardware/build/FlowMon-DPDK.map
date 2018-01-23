@@ -10059,17 +10059,17 @@ LOAD /usr/lib/gcc/x86_64-linux-gnu/5/../../../x86_64-linux-gnu/crtn.o
 .debug_pubnames
  *(.debug_pubnames)
 
-.debug_info     0x0000000000000000     0x57b2
+.debug_info     0x0000000000000000     0x57bb
  *(.debug_info .gnu.linkonce.wi.*)
- .debug_info    0x0000000000000000     0x57b2 main.o
+ .debug_info    0x0000000000000000     0x57bb main.o
 
 .debug_abbrev   0x0000000000000000      0x615
  *(.debug_abbrev)
  .debug_abbrev  0x0000000000000000      0x615 main.o
 
-.debug_line     0x0000000000000000      0x6e8
+.debug_line     0x0000000000000000      0x6ea
  *(.debug_line .debug_line.* .debug_line_end)
- .debug_line    0x0000000000000000      0x6e8 main.o
+ .debug_line    0x0000000000000000      0x6ea main.o
 
 .debug_frame
  *(.debug_frame)

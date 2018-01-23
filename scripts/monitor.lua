@@ -22,9 +22,6 @@ function master(args)
 		lm.startTask("dumpSlave", rxDev, rxDev:getRxQueue(i-1), i)
 	end
 	lm.waitForTasks()
---	local fp = io.open("dev.txt", "r")
---	fp:seek('end', -128)
---	f:write(fp:read('*a'))
 end
 
 function dumpSlave(rxDev, queue, id)
@@ -42,8 +39,7 @@ function dumpSlave(rxDev, queue, id)
 		pktCtr:update()
 	end
 	pktCtr:finalize()
---      local pkts = pktCtr:getThroughput()
---	f:write("Queue" .. id .. ": " .. pkts .. "\n" )
+
 	if id==1 then
 		local stats = rxDev:getStats()
 		print("imissed: " .. tostring(stats.imissed))
