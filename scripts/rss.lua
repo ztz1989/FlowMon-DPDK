@@ -24,6 +24,12 @@ function master(args)
 		lm.startTask("dumpSlave", rxDev, rxDev:getRxQueue(i-1))
 	end
 	lm.waitForTasks()
+
+	local f = io.open("tmp.txt", "a")
+	local stats = rxDev:getStats()
+	print("imissed: " .. tostring(stats.imissed))
+	f:write(tostring(stats.ipackets+stats.imissed) .. " " .. tostring(stats.imissed) .. "\n")
+	f:close()
 end
 
 function dumpSlave(rxDev, queue)
@@ -45,9 +51,10 @@ function dumpSlave(rxDev, queue)
 
 	pktCtr:finalize()
 
-        for i = 1, 100 do
+--[[        for i = 1, 100 do
 		if ft[i-1] ~= 0 then
         		print(i .. ' ' .. ft[i-1])
 		end
         end
+--]]
 end

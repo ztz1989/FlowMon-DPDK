@@ -14,7 +14,7 @@ function configure(parser)
 end
 
 function master(args)
-	local rxDev = device.config{port = args.rxDev, rxQueues = args.rxq, rssQueues = args.rxq, rxDescs=4096}
+	local rxDev = device.config{port = args.rxDev, rxQueues = args.rxq, rssQueues = args.rxq, rxDescs=4096, numBufs=4500}
 	device.waitForLinks()
 
 	stats.startStatsTask{rxDevices={rxDev}}
@@ -30,7 +30,7 @@ function dumpSlave(rxDev, queue, id)
 
 	--devCtr = stats:newDevRxCounter("Device counter", rxDev, "plain")
 	while lm.running() do		
-		local rx = queue:tryRecv(bufs, 4096)
+		local rx = queue:tryRecv(bufs, 256)
 		for i = 1, rx do
 			local buf = bufs[i]
 			pktCtr:countPacket(buf)
