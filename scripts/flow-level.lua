@@ -59,12 +59,13 @@ function dumpSlave(rxDev, queue)
 
 	pktCtr:finalize()
 
-	for i = 0, 9 do
+	for i = 0, FLOW_NUM-1 do
 --		io.write("Flow entry " .. i .. ': ')
 
 		for j,k in pairs(ft[i]) do
-			print(j .. ' ' .. k .. ' ')
+			io.write(j .. ' ' .. k .. ' ')
 		end
+--		io.write('\n')
 	end
 
 end

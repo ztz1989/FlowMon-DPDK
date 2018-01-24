@@ -43,7 +43,9 @@
 #define MAX_RX_QUEUE_PER_PORT 128
 #define MAX_RX_DESC 4096
 #define RX_RING_SZ 65536
+
 #define FLOW_NUM 65536
+
 #define WRITE_FILE
 #define MAX_LCORE_PARAMS 1024
 #define MAX_RX_QUEUE_PER_LCORE 16
@@ -296,7 +298,7 @@ struct thread_tx_conf tx_thread[MAX_TX_THREAD];
 	{
         	uint16_t hi_f1;
 	        uint16_t hi_f2;
-	        uint32_t ctr[3];
+	        uint64_t ctr[3];
 
 		#ifdef IPG
 		uint64_t ipg[2];
@@ -863,7 +865,7 @@ static inline void
 lcore_main_count_hash_list(__attribute__((unused)) void *dummy)
 {
 	unsigned lcore_id = rte_lcore_id(), q;
-	uint16_t nb_rx, index_l, index_h;
+	uint32_t nb_rx, index_l, index_h;
 	uint32_t buf;
 	struct rte_mbuf *bufs[burst_size];
 	struct thread_tx_conf *tx_conf = (struct thread_tx_conf *)dummy;
@@ -1014,7 +1016,7 @@ static inline void
 lcore_main_count_double_hash(__attribute__((unused)) void *dummy)
 {
 	unsigned lcore_id = rte_lcore_id(), q;
-	uint16_t nb_rx, index_l, index_h;
+	uint32_t nb_rx, index_l, index_h;
 	uint32_t buf;
 	struct rte_mbuf *bufs[burst_size];
 	struct thread_tx_conf *tx_conf = (struct thread_tx_conf *)dummy;
@@ -1048,8 +1050,8 @@ lcore_main_count_double_hash(__attribute__((unused)) void *dummy)
 		/* Per packet processing */
                 for (buf = 0; buf < nb_rx; buf++)
                 {
-			//index_l = bufs[buf]->hash.rss & 0xffff;
-			//index_h = (bufs[buf]->hash.rss & 0xffff0000)>>16;
+//			index_l = bufs[buf]->hash.rss & 0xffff;
+//			index_h = (bufs[buf]->hash.rss & 0xffff0000)>>16;
 			index_l = bufs[buf]->hash.rss & result;
 			index_h = (bufs[buf]->hash.rss & b1)>>bits;
 
@@ -1151,8 +1153,8 @@ static void handler(int sig)
 			{
 				if (f->ctr > 0)
 					sum += 1;
-				//sum += f->ctr;
-				//printf("%u: %u  ", f->rss_high, f->ctr);
+				sum += f->ctr;
+				printf("%u: %u  ", f->rss_high, f->ctr);
 				f= f->next;
 			}
 		}
@@ -1163,7 +1165,14 @@ static void handler(int sig)
                 {
                         if (pkt_ctr[i].ctr[0]>0)        sum+=1;
                         if (pkt_ctr[i].ctr[1]>0)        sum+=1;
-                }
+/*			if (pkt_ctr[i].ctr[0]>0)
+			{
+				printf("[Flow entry %d] %d: %ld", i, pkt_ctr[i].hi_f1, pkt_ctr[i].ctr[0]);
+				if (pkt_ctr[i].ctr[1]>0)
+					printf("  %d: %ld",pkt_ctr[i].hi_f2, pkt_ctr[i].ctr[1]);
+				putchar('\n');
+			}
+*/                }
 
 		#endif
 
@@ -1233,6 +1242,7 @@ int main(int argc, char **argv)
 		i++;
 	}
 
+	printf("Shift value %d\n", result);
 	b1 = result << bits;
 
 	int ret = rte_eal_init(argc, argv);
