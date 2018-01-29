@@ -27,10 +27,10 @@
 
 #define NUM_MBUFS 8192
 #define MBUF_CACHE_SIZE 256
-#define BURST_SIZE 4096
+#define BURST_SIZE 256
 
 #define RX_RINGS 2
-#define PORT_ID 3
+#define PORT_ID 0
 
 /* 3 data structure macros*/
 

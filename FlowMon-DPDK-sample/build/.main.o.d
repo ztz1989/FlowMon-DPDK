@@ -1,4 +1,4 @@
-dep_main.o = /home/tzhang/Flowcount-DPDK/FlowMon-DPDK-sample/main.c \
+dep_main.o = /home/tzhang/FlowMon-DPDK/FlowMon-DPDK-sample/main.c \
  /usr/include/stdc-predef.h \
  /home/tzhang/dpdk-stable-17.05.1/x86_64-native-linuxapp-gcc/include/rte_config.h \
  /usr/lib/gcc/x86_64-linux-gnu/5/include/stdint.h /usr/include/stdint.h \
@@ -188,4 +188,4 @@ dep_main.o = /home/tzhang/Flowcount-DPDK/FlowMon-DPDK-sample/main.c \
  /home/tzhang/dpdk-stable-17.05.1/x86_64-native-linuxapp-gcc/include/generic/rte_cycles.h \
  /home/tzhang/dpdk-stable-17.05.1/x86_64-native-linuxapp-gcc/include/rte_malloc.h \
  /home/tzhang/dpdk-stable-17.05.1/x86_64-native-linuxapp-gcc/include/rte_timer.h \
- /home/tzhang/Flowcount-DPDK/FlowMon-DPDK-sample/main.h
+ /home/tzhang/FlowMon-DPDK/FlowMon-DPDK-sample/main.h

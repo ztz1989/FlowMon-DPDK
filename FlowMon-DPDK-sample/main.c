@@ -137,7 +137,7 @@ static const struct rte_eth_conf port_conf_default = {
         .rx_adv_conf = {
                 .rss_conf = {
 			.rss_key = NULL,
-                        .rss_hf = ETH_RSS_PROTO_MASK,
+                        .rss_hf = ETH_RSS_TCP,//ETH_RSS_PROTO_MASK,
                 }
         },
 };
@@ -167,7 +167,7 @@ static void timer_cb(__attribute__((unused)) struct rte_timer *tim,
 						 (j - old)/1000000, j, eth_stats.imissed);
 	old = j;
 
-        struct timespec min = ts[0];;
+/*        struct timespec min = ts[0];;
 	double inter;
         struct flow_entry *f;
 
@@ -183,7 +183,7 @@ static void timer_cb(__attribute__((unused)) struct rte_timer *tim,
 		if (pkt_ctr[i].hi_f1 == 0)
 			continue;
 
-/*                if (pkt_ctr[i].ctr[0] > 0)
+                if (pkt_ctr[i].ctr[0] > 0)
                 {
                         flows+=1;
                         sum += pkt_ctr[i].ctr[0];
@@ -194,7 +194,7 @@ static void timer_cb(__attribute__((unused)) struct rte_timer *tim,
                       flows+=1;
                         sum += pkt_ctr[i].ctr[1];
                 }
-*/
+
                 printf("%u: %u (throughput: %.2lf pps)  %u: %u (throughput: %.2lf pps) ", pkt_ctr[i].hi_f1,
 				pkt_ctr[i].ctr[0], pkt_ctr[i].ctr[0]/inter, pkt_ctr[i].hi_f2, pkt_ctr[i].ctr[1], pkt_ctr[i].ctr[1]/inter);
                 f = pkt_ctr[i].flows;
@@ -208,7 +208,7 @@ static void timer_cb(__attribute__((unused)) struct rte_timer *tim,
                 }
                 printf("\n");
         }
-
+*/
 /*	#ifdef IPG
 		#ifdef LINKED_LIST
 			printf("[IPG] Average IPG: %.0lf\n", flows[65246]->avg);
@@ -682,6 +682,7 @@ hash_list(int p)
 			index_l = bufs[buf]->hash.rss & result;
 			index_h = (bufs[buf]->hash.rss & (result << bits))>> (32-bits);
 
+//			printf("Packet size %d\n", bufs[buf]->pkt_len);
 			rte_pktmbuf_free(bufs[buf]);
 
 			#ifdef TIMESTAMP
@@ -1019,9 +1020,13 @@ void handler(int sig)
 
 	inter = 1.0*((ts1.tv_sec-min.tv_sec)*1000000000 + ts1.tv_nsec - min.tv_nsec)/1000000000;
 
+	FILE *f1 = fopen("./throughput.txt", "a");
+
+	fprintf(f1, "----Experiment----\n");
+
 	for (i = 0; i < FLOW_NUM; i++)
 	{
-		printf("Flow entry %d: ", i);
+		//printf("Flow entry %d: ", i);
 		if (pkt_ctr[i].ctr[0] > 0)
 		{
 			flows+=1;
@@ -1033,19 +1038,27 @@ void handler(int sig)
 			flows+=1;
 			sum += pkt_ctr[i].ctr[1];
 		}
-
-		printf("%u: %u (throughput: %.2lf pps)  %u: %u (throughput: %.2lf pps) ", pkt_ctr[i].hi_f1, pkt_ctr[i].ctr[0], pkt_ctr[i].ctr[0]/inter, pkt_ctr[i].hi_f2, pkt_ctr[i].ctr[1], pkt_ctr[i].ctr[1]/inter);
+		if (pkt_ctr[i].ctr[0]>0)
+			fprintf(f1, "%u: %u (throughput: %.2lf pps)  %u: %u (throughput: %.2lf pps) ", pkt_ctr[i].hi_f1, pkt_ctr[i].ctr[0], pkt_ctr[i].ctr[0]/inter, pkt_ctr[i].hi_f2, pkt_ctr[i].ctr[1], pkt_ctr[i].ctr[1]/inter);
 		f = pkt_ctr[i].flows;
 		while (f != NULL)
 		{
 			if (f->ctr > 0)
+			{
 				flows+=1;
+				fprintf(f1, "%u: %u (throughput: %.2lf pps)", f->rss_high, f->ctr, f->ctr/inter);
+			}
+
 			sum += f->ctr;
-			printf("%u: %u (throughput: %.2lf pps)", f->rss_high, f->ctr, f->ctr/inter);
+
+			//printf("%u: %u (throughput: %.2lf pps)", f->rss_high, f->ctr, f->ctr/inter);
 			f= f->next;
 		}
-		printf("\n");
+		if (pkt_ctr[i].ctr[0]>0)
+			fprintf(f1, "\n");
 	}
+
+	fclose(f1);
 
 	printf("[Double Hash + Linked-list]: %lu flows with %lu packets\n", flows, sum);
 	#endif
@@ -1058,6 +1071,7 @@ void handler(int sig)
 		printf("\nQueue %d counter's value: %lu\n", i, re[i]);
 
 	printf("The time interval is %.4lf\n", 1.0*((ts1.tv_sec-min.tv_sec)*1000000000 + ts1.tv_nsec - min.tv_nsec)/1000000000);
+
 
 	#ifdef WRITE_FILE
 	FILE *fp;

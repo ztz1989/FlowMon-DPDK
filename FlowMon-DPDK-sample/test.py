@@ -3,8 +3,8 @@
 
 import subprocess, time, signal, random
 
-for _ in range(50):
-	p = subprocess.Popen(["./build/FlowMon", "-c", "111"])
-	time.sleep(370)
+for _ in range(5):
+	p = subprocess.Popen(["./build/FlowMon-DPDK", "-c", "112"])
+	time.sleep(80)
 	p.send_signal(signal.SIGINT)
 	time.sleep(6)

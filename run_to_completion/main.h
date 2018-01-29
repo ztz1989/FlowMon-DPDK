@@ -34,8 +34,8 @@
 
 /* 3 data structure macros*/
 
-#define DOUBLE_HASH
-//#define LINKED_LIST
+//#define DOUBLE_HASH
+#define LINKED_LIST
 //#define HASH_LIST
 
 /* Parameters for per-flow stats */

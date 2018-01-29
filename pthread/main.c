@@ -37,7 +37,7 @@
 #define MBUF_CACHE_SIZE 512
 #define RX_RINGS 2
 #define RX_RING_SIZE 4096
-#define PORT_ID 3
+#define PORT_ID 0
 #define PORT_MASK 0x8
 #define BURST_SIZE 256
 #define MAX_RX_QUEUE_PER_PORT 128
@@ -62,7 +62,7 @@ uint32_t result = 0;
 //#define HASH_LIST
 
 #define IPG
-#define ENTRY_PER_FLOW 1
+#define ENTRY_PER_FLOW 2
 
 #ifdef SD
 #define gettid() syscall(__NR_gettid)
@@ -292,7 +292,7 @@ uint16_t n_tx_thread;
 struct thread_tx_conf tx_thread[MAX_TX_THREAD];
 
 #ifdef DOUBLE_HASH
-	static inline void double_hash(int);
+//	static inline void double_hash(int);
 
 	struct pkt_count
 	{
@@ -312,12 +312,12 @@ struct thread_tx_conf tx_thread[MAX_TX_THREAD];
 #endif
 
 #ifdef LINKED_LIST
-	#define ENTRY_PER_FLOW 2
-	static inline void linked_list(int);
+//	#define ENTRY_PER_FLOW 1
+//	static inline void linked_list(int);
 
 	struct flow_entry {
 		uint16_t rss_high;
-		uint32_t ctr;
+		uint64_t ctr;
 		struct flow_entry *next;
 
 		#ifdef IPG
@@ -334,7 +334,7 @@ struct thread_tx_conf tx_thread[MAX_TX_THREAD];
 struct flow_entry
 	{
 		uint16_t rss_high;
-                uint32_t ctr;
+                uint64_t ctr;
                 struct flow_entry *next;
 
 		#ifdef IPG
@@ -353,7 +353,7 @@ struct pkt_count
 {
 	uint16_t hi_f1;
 	uint16_t hi_f2;
-	uint32_t ctr[2];
+	uint64_t ctr[2];
 
 	#ifdef IPG
         uint64_t ipg[2];
@@ -839,7 +839,6 @@ lcore_main_rx(__attribute__((unused)) void *dummy)
 
 	for (;;)
 	{
-		//port = PORT_ID;
 		struct rte_mbuf *bufs[burst_size];
 
 		const uint16_t nb_rx = rte_eth_rx_burst(port, q,
@@ -953,7 +952,7 @@ lcore_main_count_hash_list(__attribute__((unused)) void *dummy)
 				}
 				else
 				{
-					rte_prefetch0(pkt_ctr[index_l].flows);
+					//rte_prefetch0(pkt_ctr[index_l].flows);
 					f = pkt_ctr[index_l].flows;
 					hit = 0;
 					while (f != NULL)
@@ -1011,6 +1010,174 @@ lcore_main_count_hash_list(__attribute__((unused)) void *dummy)
 }
 #endif
 
+#ifdef LINKED_LIST
+
+/* init flow_entry data structures for linked list, using dynamic allocation*/
+static inline int
+flow_struct_init(uint32_t size)
+{
+	uint32_t i, j;
+	struct flow_entry *f= NULL;
+
+	for(i=0; i<FLOW_NUM; i++)
+	{
+		flows[i] = (struct flow_entry *)rte_calloc("Flow entry", 1, 
+					sizeof(struct flow_entry), 0);
+		if (flows[i] == NULL)
+		{
+			printf("Flow entry allocation failed..\n");
+			return -1;
+		}
+
+		flows[i] -> ctr = flows[i] -> rss_high = 0;
+		flows[i] -> next = NULL;
+		#ifdef IPG
+		flows[i] -> ipg = flows[i] -> avg = 0;
+		#endif
+		f = flows[i];
+
+		j = 0;
+		while (j++ < size - 1)
+		{
+			f -> next = (struct flow_entry *)rte_calloc("Flow entry", 1,
+					sizeof(struct flow_entry), 0);
+			if (f == NULL)
+			{
+				printf("Flow bucket allocation failed..\n");
+				return -1;
+			}
+
+			f = f -> next;
+			f -> ctr = f -> rss_high = 0;
+			#ifdef IPG
+			f -> ipg = f -> avg = 0;
+			#endif
+			f -> next = NULL;
+		}
+
+	}
+	return EXIT_SUCCESS;
+}
+
+static inline void
+lcore_main_count_linked_list(__attribute__((unused)) void *dummy)
+{
+	unsigned lcore_id = rte_lcore_id(), q;
+	uint32_t nb_rx, index_l, index_h;
+	uint32_t buf;
+	struct rte_mbuf *bufs[burst_size];
+	struct thread_tx_conf *tx_conf = (struct thread_tx_conf *)dummy;
+	uint8_t hit;
+
+#ifdef IPG
+	int64_t curr, global;
+#endif
+
+	q = tx_conf->conf.thread_id;
+	printf("lcore %d dequeues queue %u\n", lcore_id, tx_conf->conf.thread_id);
+
+	//struct flow_entry *f, *tmp;
+
+	/* Run until the application is quit or killed. */
+	for (;;) {
+
+		nb_rx = rte_ring_dequeue_burst(tx_conf->ring, (void *)bufs, burst_size, NULL);
+		if (unlikely(nb_rx == 0))
+			continue;
+
+		gCtr[q] += nb_rx;
+
+		#ifdef IPG
+		unsigned qNum = n_rx_thread;
+		global = 0;
+		while (qNum > 0)
+			global += gCtr[--qNum];
+		#endif
+
+		/* Per packet processing */
+		for (buf = 0; buf < nb_rx; buf++)
+		{
+			hit = 0;
+
+//			uint32_t hash = bufs[buf] -> hash.rss;
+//			uint16_t hash_h = (hash & 0xffff0000) >> 16;
+//			uint16_t hash_l = hash & 0xffff;
+
+			index_l = bufs[buf]->hash.rss & result;
+			index_h = (bufs[buf]->hash.rss & b1)>>bits;
+
+			rte_pktmbuf_free(bufs[buf]);
+
+			#ifdef TIMESTAMP
+			uint64_t timestamp = bufs[buf]->timestamp;
+			RTE_SET_USED(timestamp);
+			#endif
+
+			struct flow_entry *f = flows[index_l], *tmp;
+
+			while(likely(f != NULL))
+			{
+				if (f-> rss_high == 0)
+				{
+					f -> rss_high = index_h;
+					f -> ctr++;
+					hit = 1;
+
+					#ifdef IPG
+					f -> avg = 0;//global - 1 - f->ipg;
+					f -> ipg = 0;//global;
+					#endif
+
+					break;
+				}
+				else if (f -> rss_high == index_h)
+				{
+					f -> ctr++;
+					hit = 1;
+
+					#ifdef IPG
+					curr = global - 1 - f -> ipg;
+					f -> avg = (f -> avg * (f -> ctr - 1) + curr)/(float)(f -> ctr);
+					f -> ipg = global;
+					#endif
+
+					break;
+				}
+				else
+				{
+					tmp = f;
+					f = f -> next;
+				}
+			}
+
+			if (unlikely(hit == 0))
+			{
+				//puts("Allocate new\n");
+				f = (struct flow_entry *)rte_calloc("Flow entry", 1, sizeof(struct flow_entry), 0);
+
+				if (unlikely(f == NULL))
+					rte_exit(EXIT_FAILURE, "flow bucket allocation failure\n");
+
+				f -> rss_high = index_h;
+				f -> ctr = 1;
+				f -> next = NULL;
+				tmp -> next = f;
+
+				#ifdef IPG
+				f -> avg = global - 1 - f->ipg;
+				f -> ipg = global;
+				#endif
+			}
+
+		}
+
+//		for (buf = 0; buf < nb_rx; buf++)
+//			rte_pktmbuf_free(bufs[buf]);
+	}
+}
+
+#endif
+
 #ifdef DOUBLE_HASH
 static inline void
 lcore_main_count_double_hash(__attribute__((unused)) void *dummy)
@@ -1040,6 +1207,9 @@ lcore_main_count_double_hash(__attribute__((unused)) void *dummy)
 
 		gCtr[q] += nb_rx;
 
+//		for (buf = 0; buf < nb_rx; buf++)
+//			rte_pktmbuf_free(bufs[buf]);
+
 		#ifdef IPG
 			unsigned qNum = n_rx_thread;
 			global = 0;
@@ -1047,7 +1217,6 @@ lcore_main_count_double_hash(__attribute__((unused)) void *dummy)
 				global += gCtr[--qNum];
 		#endif
 
-		/* Per packet processing */
                 for (buf = 0; buf < nb_rx; buf++)
                 {
 //			index_l = bufs[buf]->hash.rss & 0xffff;
@@ -1106,7 +1275,6 @@ lcore_main_count_double_hash(__attribute__((unused)) void *dummy)
 				}
 			}
                 }
-
 	}
 }
 #endif
@@ -1139,7 +1307,7 @@ static void handler(int sig)
 		printf("\nValue of global counter: %lu\n", sum);
 
 		sum = 0;
-		#ifdef HASH_LIST
+#ifdef HASH_LIST
 		struct flow_entry *f;
 
 		for(i=0; i<FLOW_NUM; i++)
@@ -1154,13 +1322,37 @@ static void handler(int sig)
 				if (f->ctr > 0)
 					sum += 1;
 				sum += f->ctr;
-				printf("%u: %u  ", f->rss_high, f->ctr);
+//				printf("%u: %u  ", f->rss_high, f->ctr);
 				f= f->next;
 			}
 		}
-		#endif
+#endif
 
-		#ifdef DOUBLE_HASH
+#ifdef LINKED_LIST
+		struct flow_entry *f;
+
+		//uint64_t sum = 0, fls = 0;
+		for (i=0; i<FLOW_NUM; i++)
+		{
+			//printf("Flow entry %u: ", i);
+			f = flows[i];
+
+			while (f != NULL && f->ctr > 0)
+			{
+				//printf("%u: %u  ", f->rss_high, f->ctr);
+				sum += 1;
+				//if (f -> ctr)
+				//	fls += 1;
+				f = f -> next;
+			}
+
+			//printf("\n");
+		}
+
+		//printf("[Linked-list]: %lu flows with %lu packets\n", fls, sum);
+#endif
+
+#ifdef DOUBLE_HASH
 		for(i=0; i<FLOW_NUM; i++)
                 {
                         if (pkt_ctr[i].ctr[0]>0)        sum+=1;
@@ -1174,7 +1366,7 @@ static void handler(int sig)
 			}
 */                }
 
-		#endif
+#endif
 
 		printf("\nThe total number of flows is %lu\n", sum);
 
@@ -1210,6 +1402,10 @@ pthread_run(__rte_unused void *arg)
 			printf("Start tx thread on %d...\n", lcore_id);
 #ifdef HASH_LIST
 			lcore_main_count_hash_list((void *)&tx_thread[i]);
+#endif
+
+#ifdef LINKED_LIST
+			lcore_main_count_linked_list((void *)&tx_thread[i]);
 #endif
 
 #ifdef DOUBLE_HASH
@@ -1382,7 +1578,6 @@ int main(int argc, char **argv)
 #endif
 
 #ifdef LINKED_LIST
-
 	/* Dynamical allocation for the linked list data structure */
 	if (flow_struct_init(ENTRY_PER_FLOW) == -1)
 	{

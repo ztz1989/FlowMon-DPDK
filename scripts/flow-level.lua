@@ -58,7 +58,7 @@ function dumpSlave(rxDev, queue)
 	end
 
 	pktCtr:finalize()
-
+--[[
 	for i = 0, FLOW_NUM-1 do
 --		io.write("Flow entry " .. i .. ': ')
 
@@ -67,5 +67,5 @@ function dumpSlave(rxDev, queue)
 		end
 --		io.write('\n')
 	end
-
+--]]
 end
