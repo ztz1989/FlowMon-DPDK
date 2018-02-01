@@ -38,15 +38,15 @@ The commands to run these models are not identical for now. In particular:
 
 sudo ./build/FlowMon-DPDK -l 0,2,4,6,8 -- -P -p 8 --rx="(3,0,2,0)(3,1,4,1)" --tx="(6,0)(8,1)"
 
---rx: (Port id, queue id, lcore id, logical rx-thread-id)
+*--rx: (Port id, queue id, lcore id, logical rx-thread-id)
 
---tx: (lcore id, logical monitor-thread-id)
+*--tx: (lcore id, logical monitor-thread-id)
 
--P: Enable promiscuous mode, enabled by default
+*-P: Enable promiscuous mode, enabled by default
 
---p: the port mask. Must match the port id specified by "--rx" options
+*--p: the port mask. Must match the port id specified by "--rx" options
 
---write-file: If specified, write the statistics into a "tmp.txt" file under the same directory.
+*--write-file: If specified, write the statistics into a "tmp.txt" file under the same directory.
 
 The same thread-id identifies a pair of rx-thread and monitor-thread, and both of them will enqueue/dequeue the same software ring.
 
