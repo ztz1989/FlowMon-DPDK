@@ -8,7 +8,9 @@ A DPDK software traffic monitor for per-flow statistics. We aim at providing the
   
 ## Usage:
  * Compile with "make", just like any DPDK application.
- * **To execute**: e.g., sudo ./build/FlowMon-DPDK -c 111. Option "-c" of EAL command line parameter indicates the set of lcores to be used for the execution of traffic monitor. For example, "111" indicates lcores 0, 4 and 8 are selected. And lcore 0 is used to host the master thread, while lcore 4 and 8 are used to execute the two slave threads. In any case, (total number of selected lcores) = RX_RINGS + 1. 
+ * **To execute**: e.g., sudo ./build/FlowMon-DPDK -c 111. 
+ 
+ Option "-c" of EAL command line parameter indicates the set of lcores to be used for the execution of traffic monitor. For example, "111" indicates lcores 0, 4 and 8 are selected. And lcore 0 is used to host the master thread, while lcore 4 and 8 are used to execute the two slave threads. In any case, (total number of selected lcores) = RX_RINGS + 1. 
  * **Hardware-related parameters:** (defined as macros in main.h header file)
    * PORT_ID: The receving port number, which is assigned by DPDK during device binding phase. The default value is 2 in our testbed.
    * BURST_SIZE: The batch size to retrieve packet descriptors from the receiving packet descriptor ring. The default size is 4096.
