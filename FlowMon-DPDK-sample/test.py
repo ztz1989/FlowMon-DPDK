@@ -1,5 +1,6 @@
 #!/usr/bin/python
 # The script to test the RX functionality
+# Usage: sudo ./build/FlowMon-DPDK -c 112
 
 import subprocess, time, signal, random
 

@@ -38,7 +38,7 @@
 #define RX_RINGS 2
 #define RX_RING_SIZE 4096
 #define PORT_ID 0
-#define PORT_MASK 0x8
+#define PORT_MASK 0x4
 #define BURST_SIZE 256
 #define MAX_RX_QUEUE_PER_PORT 128
 #define MAX_RX_DESC 4096
@@ -57,9 +57,9 @@
 int bits, b1;
 uint32_t result = 0;
 
-#define DOUBLE_HASH
+//#define DOUBLE_HASH
 //#define LINKED_LIST
-//#define HASH_LIST
+#define HASH_LIST
 
 #define IPG
 #define ENTRY_PER_FLOW 2
