@@ -18,7 +18,7 @@ A DPDK software traffic monitor for per-flow statistics. We aim at providing the
    * RX_RING_SIZE: The number of packet descriptors in the RX packet descriptor ring. The default value is 4096, which is the maximum supported value for Intel 82599ES chipset.
    * WRITE_FILE: Write statistics to a "tmp.txt" file. Uncomment it to disable file writing.
   
- * **Software-related parameters:** (also defined in main.h, for more information for each of them, refer to https://docs.google.com/presentation/d/1c1Fe95DDnP9ebl9wyAXpfADcJ4JKaRJ4X0OqB2D9Kpc/edit#slide=id.g27a4ed5557_0_303)
+ * **Software-related parameters:**
    * DOUBLE_HASH, LINKED_LIST and HASH_LIST: three data structures we defined for constructing the flow table. **Only one of them should be enabled**. By default, use HASH_LIST.
    * FLOW_NUM: The number of entries in the flow table. By default, it is 65536 (16 bits long) since we use the lower 16 bits of the RSS hash value (32 bits) to index entries in the flow table, which means the higher 16 bits are used to index specific flows in each entry. This value should always be equal to the power of 2.
    * IPG: namely Inter-Packet Gap. If enabled, per-flow IPG is performed.
