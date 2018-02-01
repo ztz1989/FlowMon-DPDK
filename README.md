@@ -30,14 +30,18 @@ FlowMon-DPDK follows all the design priciples of DPDK applications. Specifically
 To compile, just like most of DPDK applications, enter the corresponding directory and type 'make'
 
 ## Usage instructions
-To commands to run these model are not identical for now.
+The commands to run these models are not identical for now. In particular:
 
-1, Run-to-completion model:
+1, Run-to-completion model: Please refer to the README file of FlowMon-DPDK-sample application. (https://github.com/ztz1989/FlowMon-DPDK/tree/master/FlowMon-DPDK-sample)
 
-2, pthread pipeline model:
+2, pthread pipeline model and L-thread pipeline model: Enter the corresponding sub-directory and conpile each of them using "make". The command to use is: 
 
-3, L-thread pipeline model:
+sudo ./build/FlowMon-DPDK -l 0,2,4,6,8 -- -P -p 8 --rx="(3,0,2,0)(3,1,4,1)" --tx="(6,0)(8,1)"
 
+--rx: (Port id, queue id, lcore id, logical rx-thread-id)
+--tx: (lcore id, logical monitor-thread-id)
 
-More information on usage coming, please hold your breath!
+The same thread-id identifies a pair of rx-thread and monitor-thread, and both of them will enqueue/dequeue the same software ring.
+
+More information on usage coming, please hold your breath!!
  
