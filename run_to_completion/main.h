@@ -50,7 +50,7 @@
 #define FLOW_NUM 65536
 
 #ifdef QUANTILE
-	#define P 0.95
+	#define P 0.99
 
 	#define dn0 0
 	#define dn1 P/2
