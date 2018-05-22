@@ -18,7 +18,7 @@ function configure(parser)
 end
 
 function master(args)
-	local rxDev = device.config{port = args.rxDev, rxQueues = args.rxq, rssQueues = args.rxq, dropEnable = false, rxDescs=4096, numBufs=4500}
+	local rxDev = device.config{port = args.rxDev, rxQueues = args.rxq, rssQueues = args.rxq, numBufs = 8192, dropEnable = false, rxDescs=4096}
 	device.waitForLinks()
 	stats.startStatsTask{rxDevices={rxDev}}
 	for i = 1, args.rxq do

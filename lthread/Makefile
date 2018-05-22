@@ -42,7 +42,7 @@ include $(RTE_SDK)/mk/rte.vars.mk
 APP = FlowMon-DPDK
 
 # all source are stored in SRCS-y
-SRCS-y := main.c
+SRCS-y := main.c murmur3.c spooky.c
 
 include /home/tzhang/FlowMon-DPDK/common/common.mk #$(RTE_SDK)/examples/performance-thread/common/common.mk
 

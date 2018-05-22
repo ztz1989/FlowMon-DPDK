@@ -1,6 +1,7 @@
 /*
  * This program aims at creating a customized full blown DPDK application
  */
+
 #define _GNU_SOURCE
 
 #include <stdio.h>
@@ -15,12 +16,6 @@
 #include <unistd.h>
 #include <math.h>
 
-#include <linux/unistd.h>
-#include <linux/kernel.h>
-#include <linux/types.h>
-#include <sys/syscall.h>
-#include <pthread.h>
-
 #include <rte_eal.h>
 #include <rte_ethdev.h>
 #include <rte_common.h>
@@ -32,6 +27,10 @@
 #include <rte_malloc.h>
 #include <rte_string_fns.h>
 #include <rte_debug.h>
+#include <rte_thash.h>
+#include <rte_tcp.h>
+
+#include "init.h"
 
 /* Set of macros */
 #define MBUF_CACHE_SIZE 512
@@ -43,115 +42,23 @@
 #define MAX_RX_QUEUE_PER_PORT 128
 #define MAX_RX_DESC 4096
 #define RX_RING_SZ 65536
-
-#define FLOW_NUM 65536
-
 #define WRITE_FILE
 #define MAX_LCORE_PARAMS 1024
 #define MAX_RX_QUEUE_PER_LCORE 16
 #define NB_SOCKETS 4
 #define NB_MBUF 4096
 
-//#define SD
-
 int bits, b1;
 uint32_t result = 0;
 
-//#define DOUBLE_HASH
-//#define LINKED_LIST
-#define HASH_LIST
-
-#define IPG
-#define ENTRY_PER_FLOW 2
+//#define SD
 
 #ifdef SD
-#define gettid() syscall(__NR_gettid)
-
-#define SCHED_DEADLINE 6
-
-/* use the proper syscall numbers */
-#ifdef __x86_64__
-#define __NR_sched_setattr             314
-#define __NR_sched_getattr             315
+	#include "sched_deadline_init.h"
 #endif
 
-#ifdef __i386__
-#define __NR_sched_setattr             351
-#define __NR_sched_getattr             352
-#endif
-
-#ifdef __arm__
-#define __NR_sched_setattr             380
-#define __NR_sched_getattr             381
-#endif
-
-static volatile int done;
-
-struct sched_attr {
-       __u32 size;
-
-       __u32 sched_policy;
-       __u64 sched_flags;
-
-       /* SCHED_NORMAL, SCHED_BATCH */
-       __s32 sched_nice;
-
-       /* SCHED_FIFO, SCHED_RR */
-       __u32 sched_priority;
-
-       /* SCHED_DEADLINE (nsec) */
-       __u64 sched_runtime;
-       __u64 sched_deadline;
-       __u64 sched_period;
-};
-
-int sched_setattr(pid_t pid,
-                 const struct sched_attr *attr,
-                 unsigned int flags)
-{
-       return syscall(__NR_sched_setattr, pid, attr, flags);
-}
-
-int sched_getattr(pid_t pid,
-                 struct sched_attr *attr,
-                 unsigned int size,
-                 unsigned int flags)
-{
-       return syscall(__NR_sched_getattr, pid, attr, size, flags);
-}
-
-static void set_affinity(void)
-{
-        struct sched_attr attr;
-        int ret;
-        unsigned flags = 0;
-
-        uint64_t mask;
-
-        mask = 0xFFFFFFFFFF;
-        ret = sched_setaffinity(0, sizeof(mask), (cpu_set_t*)&mask);
-        if (ret != 0) rte_exit(EXIT_FAILURE, "Error: cannot set affinity. Quitting...\n");
-
-        printf("deadline thread started [%ld]\n", gettid());
-
-        attr.size = sizeof(attr);
-        attr.sched_flags = 0;
-        attr.sched_nice = 0;
-        attr.sched_priority = 0;
-
-        attr.sched_policy = SCHED_DEADLINE;
-        attr.sched_runtime = 1000*1000;
-        attr.sched_period = attr.sched_deadline = 2*1000*1000;
-
-        ret = sched_setattr(0, &attr, flags);
-        if (ret < 0) {
-                done = 0;
-                perror("sched_setattr");
-                exit(-1);
-        }
-}
-
-#endif
+//#include "flow_id.h"
+#include "murmur3.h"
 
 /* mask of enabled ports. */
 uint32_t enabled_port_mask = 0x8;
@@ -273,7 +180,7 @@ struct thread_rx_conf {
 
 	uint16_t n_ring;        /**< Number of output rings */
 	struct rte_ring *ring[RTE_MAX_LCORE];
-	//struct lthread_cond *ready[RTE_MAX_LCORE];
+
 } __rte_cache_aligned;
 
 uint16_t n_rx_thread;
@@ -281,97 +188,12 @@ struct thread_rx_conf rx_thread[MAX_RX_THREAD];
 
 struct thread_tx_conf {
 	struct thread_conf conf;
-	//uint16_t tx_queue_id[RTE_MAX_LCORE];
-
 	struct rte_ring *ring;
-	//struct lthread_cond **ready;
 
 } __rte_cache_aligned;
 
 uint16_t n_tx_thread;
 struct thread_tx_conf tx_thread[MAX_TX_THREAD];
-
-#ifdef DOUBLE_HASH
-//	static inline void double_hash(int);
-
-	struct pkt_count
-	{
-        	uint16_t hi_f1;
-	        uint16_t hi_f2;
-	        uint64_t ctr[3];
-
-		#ifdef IPG
-		uint64_t ipg[2];
-		double avg[2], stdDev[2];
-		#endif
-
-	} __rte_cache_aligned;
-
-	static struct pkt_count pkt_ctr[FLOW_NUM]__rte_cache_aligned;
-
-#endif
-
-#ifdef LINKED_LIST
-//	#define ENTRY_PER_FLOW 1
-//	static inline void linked_list(int);
-
-	struct flow_entry {
-		uint16_t rss_high;
-		uint64_t ctr;
-		struct flow_entry *next;
-
-		#ifdef IPG
-		uint64_t  ipg;
-		double avg, stdDev;
-		#endif
-
-	}__rte_cache_aligned;
-
-	static struct flow_entry *flows[FLOW_NUM] __rte_cache_aligned;
-#endif
-
-#ifdef HASH_LIST
-struct flow_entry
-	{
-		uint16_t rss_high;
-                uint64_t ctr;
-                struct flow_entry *next;
-
-		#ifdef IPG
-                uint64_t ipg;
-		double avg, stdDev;
-
-		#ifdef QUANTILE
-		struct quantile qt;
-		#endif
-
-		#endif
-
-	}__rte_cache_aligned;
-
-struct pkt_count
-{
-	uint16_t hi_f1;
-	uint16_t hi_f2;
-	uint64_t ctr[2];
-
-	#ifdef IPG
-        uint64_t ipg[2];
-	double  avg[2], stdDev[2];
-
-	#ifdef QUANTILE
-        struct quantile qt[2];
-        #endif
-
-        #endif
-
-	struct flow_entry *flows;
-
-}__rte_cache_aligned;
-
-static struct pkt_count pkt_ctr[FLOW_NUM]__rte_cache_aligned;
-
-#endif
 
 static void timer_cb(__attribute__((unused)) struct rte_timer *tim,
 			__attribute__((unused)) void *arg)
@@ -832,7 +654,7 @@ lcore_main_rx(__attribute__((unused)) void *dummy)
 	port = rx_conf->rx_queue_list[0].port_id;
 
 #ifdef SD
-        set_affinity();
+        set_affinity(13,20);
 #endif
 
 	printf("[Runtime settings]: lcore %u checks queue %d\n", lcore_id, q);
@@ -849,10 +671,6 @@ lcore_main_rx(__attribute__((unused)) void *dummy)
 
 		rte_ring_enqueue_burst(rx_conf->ring[0],
                                 (void *)bufs, nb_rx, NULL);
-
-		/* Per packet processing */
-		//for (buf = 0; buf < nb_rx; buf++)
-		//	rte_pktmbuf_free(bufs[buf]);
 	}
 }
 
@@ -869,6 +687,24 @@ lcore_main_count_hash_list(__attribute__((unused)) void *dummy)
 	struct rte_mbuf *bufs[burst_size];
 	struct thread_tx_conf *tx_conf = (struct thread_tx_conf *)dummy;
 	uint8_t hit;
+
+        struct ipv4_hdr *ipv4_hdr;
+        struct tcp_hdr *tcp;
+
+        union rte_thash_tuple ipv4_tuple;
+	uint32_t hash;
+
+	uint8_t default_rss_key[] = {
+	        0x6d, 0x5a, 0x56, 0xda, 0x25, 0x5b, 0x0e, 0xc2,
+	        0x41, 0x67, 0x25, 0x3d, 0x43, 0xa3, 0x8f, 0xb0,
+	        0xd0, 0xca, 0x2b, 0xcb, 0xae, 0x7b, 0x30, 0xb4,
+	        0x77, 0xcb, 0x2d, 0xa3, 0x80, 0x30, 0xf2, 0x0c,
+	        0x6a, 0x42, 0xb7, 0x3b, 0xbe, 0xac, 0x01, 0xfa,
+	};
+
+	uint8_t converted_rss_key[RTE_DIM(default_rss_key)];
+
+	rte_convert_rss_key((uint32_t *)&default_rss_key, (uint32_t *)converted_rss_key, RTE_DIM(default_rss_key));
 
 #ifdef IPG
 	int64_t curr, global;
@@ -898,10 +734,31 @@ lcore_main_count_hash_list(__attribute__((unused)) void *dummy)
 		/* Per packet processing */
                 for (buf = 0; buf < nb_rx; buf++)
                 {
-			index_l = bufs[buf]->hash.rss & 0xffff;
-			index_h = (bufs[buf]->hash.rss & 0xffff0000)>>16;
+			ipv4_hdr = (struct ipv4_hdr *)(rte_pktmbuf_mtod(bufs[buf], struct ether_hdr *) + 1);
+                        ipv4_tuple.v4.src_addr = rte_be_to_cpu_32(ipv4_hdr->src_addr);
+                        ipv4_tuple.v4.dst_addr = rte_be_to_cpu_32(ipv4_hdr->dst_addr);
+                        //ipv4_tuple.proto = ipv4_hdr->next_proto_id;
+
+                        tcp = (struct tcp_hdr *)((unsigned char *)ipv4_hdr + sizeof(struct ipv4_hdr));
+                        ipv4_tuple.v4.sport = rte_be_to_cpu_16(tcp->src_port);
+                        ipv4_tuple.v4.dport = rte_be_to_cpu_16(tcp->dst_port);
+                        //printf("%u %u %u\n", ipv4_hdr->next_proto_id, ipv4_tuple.dport, ipv4_tuple.sport);
+
+                        hash = rte_softrss_be((uint32_t *)&ipv4_tuple, RTE_THASH_V4_L3_LEN, converted_rss_key);
+                        //hash = ipv4_tuple.v4.src_addr + ipv4_tuple.v4.dst_addr + ipv4_tuple.v4.sport + ipv4_tuple.v4.dport;
+                        //hash = ipv4_tuple.v4.src_addr ^ ipv4_tuple.v4.dst_addr ^ ipv4_tuple.v4.sport ^ ipv4_tuple.v4.dport;
+                        //MurmurHash3_x64_128(&ipv4_tuple, sizeof(ipv4_tuple), 1, &hash);
+                        //hash = spooky_hash32(&ipv4_tuple,sizeof(ipv4_tuple), 1);
 
 			rte_pktmbuf_free(bufs[buf]);
+
+                        index_l = hash & 0xffff;
+                        index_h = (hash & 0xffff0000) >> 16;
+
+//			index_l = bufs[buf]->hash.rss & 0xffff;
+//			index_h = (bufs[buf]->hash.rss & 0xffff0000)>>16;
+
+//			rte_pktmbuf_free(bufs[buf]);
 
 			if(pkt_ctr[index_l].hi_f1 == 0)
 			{
@@ -1069,6 +926,10 @@ lcore_main_count_linked_list(__attribute__((unused)) void *dummy)
 	struct thread_tx_conf *tx_conf = (struct thread_tx_conf *)dummy;
 	uint8_t hit;
 
+#ifdef SD
+//      set_affinity(19,100);
+#endif
+
 #ifdef IPG
 	int64_t curr, global;
 #endif
@@ -1104,7 +965,7 @@ lcore_main_count_linked_list(__attribute__((unused)) void *dummy)
 //			uint16_t hash_l = hash & 0xffff;
 
 			index_l = bufs[buf]->hash.rss & result;
-			index_h = (bufs[buf]->hash.rss & b1)>>bits;
+			index_h = (bufs[buf]->hash.rss & b1) >> bits;
 
 			rte_pktmbuf_free(bufs[buf]);
 
@@ -1187,7 +1048,24 @@ lcore_main_count_double_hash(__attribute__((unused)) void *dummy)
 	uint32_t buf;
 	struct rte_mbuf *bufs[burst_size];
 	struct thread_tx_conf *tx_conf = (struct thread_tx_conf *)dummy;
-	//uint8_t hit;
+
+	struct ipv4_hdr *ipv4_hdr;
+        struct tcp_hdr *tcp;
+
+        union rte_thash_tuple ipv4_tuple;
+        uint32_t hash;
+
+        uint8_t default_rss_key[] = {
+                0x6d, 0x5a, 0x56, 0xda, 0x25, 0x5b, 0x0e, 0xc2,
+                0x41, 0x67, 0x25, 0x3d, 0x43, 0xa3, 0x8f, 0xb0,
+                0xd0, 0xca, 0x2b, 0xcb, 0xae, 0x7b, 0x30, 0xb4,
+                0x77, 0xcb, 0x2d, 0xa3, 0x80, 0x30, 0xf2, 0x0c,
+                0x6a, 0x42, 0xb7, 0x3b, 0xbe, 0xac, 0x01, 0xfa,
+        };
+
+        uint8_t converted_rss_key[RTE_DIM(default_rss_key)]__rte_cache_aligned;
+
+        rte_convert_rss_key((uint32_t *)&default_rss_key, (uint32_t *)converted_rss_key, RTE_DIM(default_rss_key));
 
 #ifdef IPG
 	int64_t curr, global;
@@ -1219,12 +1097,33 @@ lcore_main_count_double_hash(__attribute__((unused)) void *dummy)
 
                 for (buf = 0; buf < nb_rx; buf++)
                 {
+                        ipv4_hdr = (struct ipv4_hdr *)(rte_pktmbuf_mtod(bufs[buf], struct ether_hdr *) + 1);
+                        ipv4_tuple.v4.src_addr = rte_be_to_cpu_32(ipv4_hdr->src_addr);
+                        //ipv4_tuple.v4.dst_addr = ipv4_hdr->dst_addr;//rte_be_to_cpu_32(ipv4_hdr->dst_addr);
+                        //ipv4_tuple.proto = ipv4_hdr->next_proto_id;
+
+                        tcp = (struct tcp_hdr *)((unsigned char *)ipv4_hdr + sizeof(struct ipv4_hdr));
+                        ipv4_tuple.v4.sport = rte_be_to_cpu_16(tcp->src_port);
+                        ipv4_tuple.v4.dport = rte_be_to_cpu_16(tcp->dst_port);
+                        //printf("%u %u %u\n", ipv4_hdr->next_proto_id, ipv4_tuple.dport, ipv4_tuple.sport);
+
+                        hash = rte_softrss_be((uint32_t *)&ipv4_tuple, RTE_THASH_V4_L3_LEN, converted_rss_key);
+                        //hash = ipv4_tuple.v4.src_addr + ipv4_tuple.v4.dst_addr + ipv4_tuple.v4.sport + ipv4_tuple.v4.dport;
+                        //hash = ipv4_tuple.v4.src_addr ^ ipv4_tuple.v4.dst_addr ^ ipv4_tuple.v4.sport ^ ipv4_tuple.v4.dport;
+                        //MurmurHash3_x64_128(&ipv4_tuple, sizeof(ipv4_tuple), 1, &hash);
+                        //hash = spooky_hash32(&ipv4_tuple,sizeof(ipv4_tuple), 1);
+
+                        rte_pktmbuf_free(bufs[buf]);
+
+                        index_l = hash & 0xffff;
+                        index_h = (hash & 0xffff0000) >> 16;
+
 //			index_l = bufs[buf]->hash.rss & 0xffff;
 //			index_h = (bufs[buf]->hash.rss & 0xffff0000)>>16;
-			index_l = bufs[buf]->hash.rss & result;
-			index_h = (bufs[buf]->hash.rss & b1)>>bits;
+//			index_l = bufs[buf]->hash.rss & result;
+//			index_h = (bufs[buf]->hash.rss & b1)>>bits;
 
-			rte_pktmbuf_free(bufs[buf]);
+//			rte_pktmbuf_free(bufs[buf]);
 
 			if(pkt_ctr[index_l].hi_f1 == 0)
 			{
@@ -1488,7 +1387,7 @@ int main(int argc, char **argv)
         rx_conf.rx_thresh.pthresh = 8;
         rx_conf.rx_thresh.hthresh = 8;
         rx_conf.rx_thresh.wthresh = 0;
-	rx_conf.rx_free_thresh = 32;
+	rx_conf.rx_free_thresh = 2048;
         rx_conf.rx_drop_en = 0;
 
 	nb_lcores = rte_lcore_count();

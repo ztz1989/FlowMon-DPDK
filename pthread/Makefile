@@ -42,7 +42,7 @@ include $(RTE_SDK)/mk/rte.vars.mk
 APP = FlowMon-DPDK
 
 # all source are stored in SRCS-y
-SRCS-y := main.c
+SRCS-y := main.c murmur3.c
 
 CFLAGS += $(WERROR_FLAGS)
 

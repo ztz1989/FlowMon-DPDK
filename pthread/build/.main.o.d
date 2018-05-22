@@ -61,24 +61,11 @@ dep_main.o = /home/tzhang/FlowMon-DPDK/pthread/main.c \
  /usr/include/x86_64-linux-gnu/bits/mathdef.h \
  /usr/include/x86_64-linux-gnu/bits/mathcalls.h \
  /usr/include/x86_64-linux-gnu/bits/mathinline.h \
- /usr/include/linux/unistd.h /usr/include/x86_64-linux-gnu/asm/unistd.h \
- /usr/include/x86_64-linux-gnu/asm/unistd_64.h \
- /usr/include/linux/kernel.h /usr/include/linux/sysinfo.h \
- /usr/include/linux/types.h /usr/include/x86_64-linux-gnu/asm/types.h \
- /usr/include/asm-generic/types.h /usr/include/asm-generic/int-ll64.h \
- /usr/include/x86_64-linux-gnu/asm/bitsperlong.h \
- /usr/include/asm-generic/bitsperlong.h /usr/include/linux/posix_types.h \
- /usr/include/linux/stddef.h \
- /usr/include/x86_64-linux-gnu/asm/posix_types.h \
- /usr/include/x86_64-linux-gnu/asm/posix_types_64.h \
- /usr/include/asm-generic/posix_types.h \
- /usr/include/x86_64-linux-gnu/sys/syscall.h \
- /usr/include/x86_64-linux-gnu/bits/syscall.h /usr/include/pthread.h \
- /usr/include/sched.h /usr/include/x86_64-linux-gnu/bits/sched.h \
- /usr/include/x86_64-linux-gnu/bits/timex.h \
- /usr/include/x86_64-linux-gnu/bits/setjmp.h \
  /home/tzhang/dpdk-stable-17.05.1/x86_64-native-linuxapp-gcc/include/rte_eal.h \
+ /usr/include/sched.h /usr/include/x86_64-linux-gnu/bits/sched.h \
  /home/tzhang/dpdk-stable-17.05.1/x86_64-native-linuxapp-gcc/include/rte_per_lcore.h \
+ /usr/include/pthread.h /usr/include/x86_64-linux-gnu/bits/timex.h \
+ /usr/include/x86_64-linux-gnu/bits/setjmp.h \
  /home/tzhang/dpdk-stable-17.05.1/x86_64-native-linuxapp-gcc/include/rte_config.h \
  /home/tzhang/dpdk-stable-17.05.1/x86_64-native-linuxapp-gcc/include/rte_ethdev.h \
  /home/tzhang/dpdk-stable-17.05.1/x86_64-native-linuxapp-gcc/include/rte_dev.h \
@@ -191,4 +178,21 @@ dep_main.o = /home/tzhang/FlowMon-DPDK/pthread/main.c \
  /home/tzhang/dpdk-stable-17.05.1/x86_64-native-linuxapp-gcc/include/rte_cycles.h \
  /home/tzhang/dpdk-stable-17.05.1/x86_64-native-linuxapp-gcc/include/generic/rte_cycles.h \
  /home/tzhang/dpdk-stable-17.05.1/x86_64-native-linuxapp-gcc/include/rte_malloc.h \
- /home/tzhang/dpdk-stable-17.05.1/x86_64-native-linuxapp-gcc/include/rte_string_fns.h
+ /home/tzhang/dpdk-stable-17.05.1/x86_64-native-linuxapp-gcc/include/rte_string_fns.h \
+ /home/tzhang/dpdk-stable-17.05.1/x86_64-native-linuxapp-gcc/include/rte_thash.h \
+ /home/tzhang/dpdk-stable-17.05.1/x86_64-native-linuxapp-gcc/include/rte_ip.h \
+ /usr/include/netinet/in.h /usr/include/x86_64-linux-gnu/sys/socket.h \
+ /usr/include/x86_64-linux-gnu/sys/uio.h \
+ /usr/include/x86_64-linux-gnu/bits/uio.h \
+ /usr/include/x86_64-linux-gnu/bits/socket.h \
+ /usr/include/x86_64-linux-gnu/bits/socket_type.h \
+ /usr/include/x86_64-linux-gnu/bits/sockaddr.h \
+ /usr/include/x86_64-linux-gnu/asm/socket.h \
+ /usr/include/asm-generic/socket.h \
+ /usr/include/x86_64-linux-gnu/asm/sockios.h \
+ /usr/include/asm-generic/sockios.h \
+ /usr/include/x86_64-linux-gnu/bits/socket2.h \
+ /usr/include/x86_64-linux-gnu/bits/in.h \
+ /home/tzhang/dpdk-stable-17.05.1/x86_64-native-linuxapp-gcc/include/rte_tcp.h \
+ /home/tzhang/FlowMon-DPDK/pthread/init.h \
+ /home/tzhang/FlowMon-DPDK/pthread/murmur3.h

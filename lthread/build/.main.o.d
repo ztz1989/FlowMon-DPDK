@@ -190,7 +190,11 @@ dep_main.o = /home/tzhang/FlowMon-DPDK/lthread/main.c \
  /usr/include/x86_64-linux-gnu/bits/fcntl-linux.h \
  /usr/include/x86_64-linux-gnu/bits/stat.h \
  /usr/include/x86_64-linux-gnu/bits/fcntl2.h /usr/include/netinet/in.h \
- /usr/include/x86_64-linux-gnu/bits/in.h /usr/include/curses.h \
- /usr/include/ncurses_dll.h \
+ /usr/include/x86_64-linux-gnu/bits/in.h \
+ /home/tzhang/dpdk-stable-17.05.1/x86_64-native-linuxapp-gcc/include/rte_thash.h \
+ /home/tzhang/dpdk-stable-17.05.1/x86_64-native-linuxapp-gcc/include/rte_ip.h \
+ /home/tzhang/dpdk-stable-17.05.1/x86_64-native-linuxapp-gcc/include/rte_tcp.h \
+ /usr/include/curses.h /usr/include/ncurses_dll.h \
  /usr/lib/gcc/x86_64-linux-gnu/5/include/stdbool.h /usr/include/unctrl.h \
- /usr/include/curses.h
+ /usr/include/curses.h /home/tzhang/FlowMon-DPDK/lthread/murmur3.h \
+ /home/tzhang/FlowMon-DPDK/lthread/spooky.h

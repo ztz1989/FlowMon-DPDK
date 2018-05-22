@@ -24,8 +24,13 @@
 #include <rte_string_fns.h>
 #include <rte_log.h>
 #include <lthread_api.h>
-
+#include <rte_thash.h>
+#include <rte_tcp.h>
 #include <ncurses.h>
+#include <rte_byteorder.h>
+
+#include "murmur3.h"
+#include "spooky.h"
 
 #define RX_RINGS 10
 #define PORT_ID 0
@@ -52,6 +57,7 @@ struct rte_eth_rxconf rx_conf;
 static uint16_t nb_rxd = RTE_RX_DESC_DEFAULT;
 
 #define NB_MBUF 4096
+
 /*
 #define NB_MBUF RTE_MAX(\
 		(nb_ports*nb_rx_queue*RTE_RX_DESC_DEFAULT +       \
@@ -68,6 +74,15 @@ static int numa_on = 1;    /**< NUMA is enabled by default. */
 static int write = 0;   /*** Write the output to a temporary file **/
 
 struct rte_eth_rxconf rx_conf;
+
+uint8_t default_rss_key[] = {
+        0x6d, 0x5a, 0x56, 0xda, 0x25, 0x5b, 0x0e, 0xc2,
+        0x41, 0x67, 0x25, 0x3d, 0x43, 0xa3, 0x8f, 0xb0,
+        0xd0, 0xca, 0x2b, 0xcb, 0xae, 0x7b, 0x30, 0xb4,
+        0x77, 0xcb, 0x2d, 0xa3, 0x80, 0x30, 0xf2, 0x0c,
+        0x6a, 0x42, 0xb7, 0x3b, 0xbe, 0xac, 0x01, 0xfa,
+};
+
 static const struct rte_eth_conf port_conf = {
         .rxmode = {
                 .mq_mode = ETH_MQ_RX_RSS,
@@ -86,6 +101,7 @@ static const struct rte_eth_conf port_conf = {
                         .rss_hf = ETH_RSS_PROTO_MASK,
                 }
         },
+
 };
 
 static struct rte_mempool *pktmbuf_pool[NB_SOCKETS];
@@ -148,9 +164,10 @@ static uint16_t nb_tx_thread_params = RTE_DIM(tx_thread_params_array_default);
 #define MAX_TX_THREAD 1024
 #define MAX_THREAD    (MAX_RX_THREAD + MAX_TX_THREAD)
 
-/**
+/*
  * Producers and consumers threads configuration
  */
+
 //static int lthreads_on = 1; /**< Use lthreads for processing*/
 
 rte_atomic16_t rx_counter;  /**< Number of spawned rx threads */
@@ -202,6 +219,35 @@ static int batch_n[RX_RINGS];
 
 #define IPG
 //#define NC
+/*
+uint8_t default_rss_key[] = {
+	0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a,
+	0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a,
+	0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a,
+	0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a,
+	0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a,
+};
+
+
+uint8_t default_rss_key[] = {
+        0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01,
+        0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01,
+        0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01,
+        0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01,
+        0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01,
+};
+
+
+uint8_t default_rss_key[] = {
+	0x6d, 0x5a, 0x56, 0xda, 0x25, 0x5b, 0x0e, 0xc2,
+	0x41, 0x67, 0x25, 0x3d, 0x43, 0xa3, 0x8f, 0xb0,
+	0xd0, 0xca, 0x2b, 0xcb, 0xae, 0x7b, 0x30, 0xb4,
+	0x77, 0xcb, 0x2d, 0xa3, 0x80, 0x30, 0xf2, 0x0c,
+	0x6a, 0x42, 0xb7, 0x3b, 0xbe, 0xac, 0x01, 0xfa,
+};
+*/
+
+uint8_t converted_rss_key[RTE_DIM(default_rss_key)];
 
 #ifdef NC
 static inline
@@ -1063,6 +1109,14 @@ lthread_rx(void *dummy)
 	}
 }
 
+struct ipv4_5tuple {
+	uint8_t  proto;
+	uint32_t src_addr;
+	uint32_t dst_addr;
+	uint16_t sport;
+	uint16_t dport;
+} __rte_cache_aligned;
+
 /* main processing loop */
 static void
 lthread_tx_per_ring(void *dummy)
@@ -1075,9 +1129,19 @@ lthread_tx_per_ring(void *dummy)
 	struct rte_mbuf *pkts_burst[MAX_PKT_BURST];
 	struct lthread_cond *ready;
 
+	struct ipv4_hdr *ipv4_hdr;
+	struct tcp_hdr *tcp;
+
+	union rte_thash_tuple ipv4_tuple;
+	//struct ipv4_5tuple ipv4_tuple = {0,0,0,0,0};
+	uint32_t hash;
+
 #ifdef IPG
 	int64_t curr, global;
 #endif
+
+	rte_convert_rss_key((uint32_t *)&default_rss_key, (uint32_t *)converted_rss_key, RTE_DIM(default_rss_key));
+
 	tx_conf = (struct thread_tx_conf *)dummy;
 	ring = tx_conf->ring;
 	ready = *tx_conf->ready;
@@ -1095,7 +1159,7 @@ lthread_tx_per_ring(void *dummy)
 	rte_atomic16_inc(&tx_counter);
 	while (1) {
 		/*
-		 * Read packet from ring
+		 * Retrieve packets from ring
 		 */
 		nb_rx = rte_ring_sc_dequeue_burst(ring, (void **)pkts_burst,
 				MAX_PKT_BURST, NULL);
@@ -1113,14 +1177,38 @@ lthread_tx_per_ring(void *dummy)
 
 			for (buf=0; buf<nb_rx; buf++)
 			{
-				index_l = pkts_burst[buf]->hash.rss & 0xffff;
-				index_h = (pkts_burst[buf]->hash.rss & 0xffff0000)>>16;
+/*				ipv4_hdr = (struct ipv4_hdr *)(rte_pktmbuf_mtod(pkts_burst[buf], struct ether_hdr *) + 1);
+				ipv4_tuple.v4.src_addr = rte_be_to_cpu_32(ipv4_hdr->src_addr);
+				ipv4_tuple.v4.dst_addr = rte_be_to_cpu_32(ipv4_hdr->dst_addr);
+				//ipv4_tuple.proto = ipv4_hdr->next_proto_id;
+
+				tcp = (struct tcp_hdr *)((unsigned char *)ipv4_hdr + sizeof(struct ipv4_hdr));
+				ipv4_tuple.v4.sport = rte_be_to_cpu_16(tcp->src_port);
+				ipv4_tuple.v4.dport = rte_be_to_cpu_16(tcp->dst_port);
+				//printf("%u %u %u\n", ipv4_hdr->next_proto_id, ipv4_tuple.dport, ipv4_tuple.sport);
+
+				hash = rte_softrss_be((uint32_t *)&ipv4_tuple, RTE_THASH_V4_L3_LEN, converted_rss_key);
+				//hash = ipv4_tuple.v4.src_addr + ipv4_tuple.v4.dst_addr + ipv4_tuple.v4.sport + ipv4_tuple.v4.dport;
+				//hash = ipv4_tuple.v4.src_addr ^ ipv4_tuple.v4.dst_addr ^ ipv4_tuple.v4.sport ^ ipv4_tuple.v4.dport;
+				//MurmurHash3_x64_128(&ipv4_tuple, sizeof(ipv4_tuple), 1, &hash);
+				//hash = spooky_hash32(&ipv4_tuple,sizeof(ipv4_tuple), 1);
+
+				rte_pktmbuf_free(pkts_burst[buf]);
+
+				index_l = hash & 0xffff;
+				index_h = (hash & 0xffff0000) >> 16;
+*/
+                                index_l = pkts_burst[buf]->hash.rss & 0xffff;
+                                index_h = (pkts_burst[buf]->hash.rss & 0xffff0000)>>16;
+
 				rte_pktmbuf_free(pkts_burst[buf]);
 
 				if (pkt_ctr[index_l].hi_f1 == 0)
 				{
 					pkt_ctr[index_l].hi_f1 = index_h;
 					pkt_ctr[index_l].ctr[0]++;
+
+					//printf("index low: %d, index high: %d\n", index_l, index_h);
 
 					#ifdef IPG
                                         pkt_ctr[index_l].avg[0] = pkt_ctr[index_l].ipg[0] = 0;
@@ -1193,10 +1281,14 @@ lthread_tx_per_ring(void *dummy)
 	    	                                #endif
 						#endif
 					}
+					else
+					{
+						pkt_ctr[index_l].ctr[2]++;
+					}
 				}
 			}
 
-			lthread_yield();
+//			lthread_yield();
 		} else
 			lthread_cond_wait(ready, 0);
 	}
@@ -1361,6 +1453,7 @@ static void handler(int sig __rte_unused)
 		printf("\n");
 	#endif
 
+	FILE *f1 = fopen("flows.txt", "w");
 	for (i = 0; i < FLOW_NUM; i++)
 	{
 //		printf("Flow entry %d: ", i);
@@ -1376,8 +1469,11 @@ static void handler(int sig __rte_unused)
 			sum += pkt_ctr[i].ctr[1];
 		}
 
-//		printf("%u: %u  %u: %u \n", pkt_ctr[i].hi_f1, pkt_ctr[i].ctr[0], pkt_ctr[i].hi_f2, pkt_ctr[i].ctr[1]);
+		//if (pkt_ctr[i].ctr[0] > 0)
+			//printf("%u: %u  %u: %u \n", pkt_ctr[i].hi_f1, pkt_ctr[i].ctr[0], pkt_ctr[i].hi_f2, pkt_ctr[i].ctr[1]);
+		fprintf(f1, "%u: %u  %u: %u \n", pkt_ctr[i].hi_f1, pkt_ctr[i].ctr[0], pkt_ctr[i].hi_f2, pkt_ctr[i].ctr[1]);
 	}
+	fclose(f1);
 
 	#ifdef NC
 
@@ -1404,6 +1500,8 @@ static void handler(int sig __rte_unused)
 					 + eth_stats.ierrors, eth_stats.imissed);
 		for (i = 0; i < n_rx_thread; i++)
 			fprintf(fp, "%lu ", re[i]);
+
+		fprintf(fp, "%d", flows);
 		fputs(" \n", fp);
 		fclose(fp);
 	}
