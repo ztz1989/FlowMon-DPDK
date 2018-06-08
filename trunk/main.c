@@ -53,14 +53,14 @@
 #define NB_SOCKETS 4
 #define NB_MBUF 4096
 
-#define SD
+//#define SD
 
 int bits, b1;
 uint32_t result = 0;
 
-//#define DOUBLE_HASH
+#define DOUBLE_HASH
 //#define LINKED_LIST
-#define HASH_LIST
+//#define HASH_LIST
 
 
 //#define IPG

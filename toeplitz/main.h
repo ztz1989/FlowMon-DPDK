@@ -1,8 +1,9 @@
 #define INC
 //#define RAND
 
-//#define TOE
-#define TOE_BE
+
+#define TOE
+//#define TOE_BE
 //#define ADD
 //#define XOR
 //#define MURMUR

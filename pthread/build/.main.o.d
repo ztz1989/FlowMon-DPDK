@@ -195,4 +195,6 @@ dep_main.o = /home/tzhang/FlowMon-DPDK/pthread/main.c \
  /usr/include/x86_64-linux-gnu/bits/in.h \
  /home/tzhang/dpdk-stable-17.05.1/x86_64-native-linuxapp-gcc/include/rte_tcp.h \
  /home/tzhang/FlowMon-DPDK/pthread/init.h \
- /home/tzhang/FlowMon-DPDK/pthread/murmur3.h
+ /home/tzhang/FlowMon-DPDK/pthread/flow_id.h \
+ /home/tzhang/FlowMon-DPDK/pthread/murmur3.h \
+ /home/tzhang/FlowMon-DPDK/pthread/spooky.h

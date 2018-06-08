@@ -1,5 +1,6 @@
 #include <rte_thash.h>
 #include <rte_tcp.h>
+#include <rte_memory.h>
 
 struct ipv4_hdr *ipv4_hdr;
 struct tcp_hdr *tcp;
@@ -16,3 +17,11 @@ uint8_t default_rss_key[] = {
 };
 
 uint8_t converted_rss_key[RTE_DIM(default_rss_key)];
+
+struct ipv4_5tuple {
+	uint8_t  proto;
+	uint32_t ip_src;
+	uint32_t ip_dst;
+	uint16_t port_src;
+	uint16_t port_dst;
+}__rte_cache_aligned;

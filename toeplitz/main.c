@@ -89,7 +89,7 @@ lcore_hello(__attribute__((unused)) void *arg)
 #endif
 
 #ifdef TOE
-		hash = rte_softrss((uint32_t *)&tuple, RTE_THASH_V4_L3_LEN, rss_hash_default_key);
+		hash = rte_softrss((uint32_t *)&tuple, RTE_THASH_V4_L4_LEN, rss_hash_default_key);
 #elif defined(TOE_BE)
 		hash = rte_softrss_be((uint32_t *)&tuple, RTE_THASH_V4_L3_LEN, converted_key);
 #elif defined(ADD)
