@@ -88,6 +88,15 @@ static struct rte_mempool *pktmbuf_pool[NB_SOCKETS];
 
 uint64_t *gCtr;
 
+#define RSS_HASH_KEY_LENGTH 40
+static uint8_t hash_key[RSS_HASH_KEY_LENGTH] = {
+        0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A,
+        0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A,
+        0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A,
+        0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A,
+        0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A, 
+};
+
 static struct rte_eth_conf port_conf = {
 	.rxmode = {
 		.mq_mode = ETH_MQ_RX_RSS,
@@ -101,7 +110,7 @@ static struct rte_eth_conf port_conf = {
 	},
 	.rx_adv_conf = {
 		.rss_conf = {
-			.rss_key = NULL,
+			.rss_key = hash_key,
 			.rss_hf = ETH_RSS_PROTO_MASK,
 		}
 	},
@@ -734,7 +743,7 @@ lcore_main_count_hash_list(__attribute__((unused)) void *dummy)
 		/* Per packet processing */
                 for (buf = 0; buf < nb_rx; buf++)
                 {
-			ipv4_hdr = (struct ipv4_hdr *)(rte_pktmbuf_mtod(bufs[buf], struct ether_hdr *) + 1);
+/*			ipv4_hdr = (struct ipv4_hdr *)(rte_pktmbuf_mtod(bufs[buf], struct ether_hdr *) + 1);
                         ipv4_tuple.v4.src_addr = rte_be_to_cpu_32(ipv4_hdr->src_addr);
                         ipv4_tuple.v4.dst_addr = rte_be_to_cpu_32(ipv4_hdr->dst_addr);
                         //ipv4_tuple.proto = ipv4_hdr->next_proto_id;
@@ -754,11 +763,10 @@ lcore_main_count_hash_list(__attribute__((unused)) void *dummy)
 
                         index_l = hash & 0xffff;
                         index_h = (hash & 0xffff0000) >> 16;
-
-//			index_l = bufs[buf]->hash.rss & 0xffff;
-//			index_h = (bufs[buf]->hash.rss & 0xffff0000)>>16;
-
-//			rte_pktmbuf_free(bufs[buf]);
+*/
+			index_l = bufs[buf]->hash.rss & 0xffff;
+			index_h = (bufs[buf]->hash.rss & 0xffff0000)>>16;
+			rte_pktmbuf_free(bufs[buf]);
 
 			if(pkt_ctr[index_l].hi_f1 == 0)
 			{
@@ -1232,7 +1240,7 @@ static void handler(int sig)
 			{
 				if (f->ctr > 0)
 					sum += 1;
-				sum += f->ctr;
+				//sum += f->ctr;
 //				printf("%u: %u  ", f->rss_high, f->ctr);
 				f= f->next;
 			}

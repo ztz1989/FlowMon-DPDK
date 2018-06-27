@@ -1,6 +1,6 @@
-#define DOUBLE_HASH
+//#define DOUBLE_HASH
 //#define LINKED_LIST
-//#define HASH_LIST
+#define HASH_LIST
 
 //#define IPG
 
