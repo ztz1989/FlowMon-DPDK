@@ -10337,17 +10337,17 @@ per_lt          0x0000000000950598        0x8
 .debug_pubnames
  *(.debug_pubnames)
 
-.debug_info     0x0000000000000000    0x1ccde
+.debug_info     0x0000000000000000    0x1cceb
  *(.debug_info .gnu.linkonce.wi.*)
- .debug_info    0x0000000000000000     0x9c28 main.o
- .debug_info    0x0000000000009c28      0x937 murmur3.o
- .debug_info    0x000000000000a55f      0xcfa spooky.o
- .debug_info    0x000000000000b259     0x5067 lthread.o
- .debug_info    0x00000000000102c0     0x44b8 lthread_sched.o
- .debug_info    0x0000000000014778     0x2b11 lthread_cond.o
- .debug_info    0x0000000000017289     0x271b lthread_tls.o
- .debug_info    0x00000000000199a4     0x2524 lthread_mutex.o
- .debug_info    0x000000000001bec8      0xe16 lthread_diag.o
+ .debug_info    0x0000000000000000     0x9c35 main.o
+ .debug_info    0x0000000000009c35      0x937 murmur3.o
+ .debug_info    0x000000000000a56c      0xcfa spooky.o
+ .debug_info    0x000000000000b266     0x5067 lthread.o
+ .debug_info    0x00000000000102cd     0x44b8 lthread_sched.o
+ .debug_info    0x0000000000014785     0x2b11 lthread_cond.o
+ .debug_info    0x0000000000017296     0x271b lthread_tls.o
+ .debug_info    0x00000000000199b1     0x2524 lthread_mutex.o
+ .debug_info    0x000000000001bed5      0xe16 lthread_diag.o
 
 .debug_abbrev   0x0000000000000000     0x2606
  *(.debug_abbrev)
@@ -10361,18 +10361,18 @@ per_lt          0x0000000000950598        0x8
  .debug_abbrev  0x0000000000001ee6      0x3d8 lthread_mutex.o
  .debug_abbrev  0x00000000000022be      0x348 lthread_diag.o
 
-.debug_line     0x0000000000000000     0x5dc0
+.debug_line     0x0000000000000000     0x5dc2
  *(.debug_line .debug_line.* .debug_line_end)
- .debug_line    0x0000000000000000     0x129e main.o
- .debug_line    0x000000000000129e      0x260 murmur3.o
- .debug_line    0x00000000000014fe      0x8a4 spooky.o
- .debug_line    0x0000000000001da2     0x1338 lthread.o
- .debug_line    0x00000000000030da      0xf30 lthread_sched.o
- .debug_line    0x000000000000400a      0xa37 lthread_cond.o
- .debug_line    0x0000000000004a41      0x75c lthread_tls.o
- .debug_line    0x000000000000519d      0x8bb lthread_mutex.o
- .debug_line    0x0000000000005a58      0x368 lthread_diag.o
- .debug_line    0x0000000000005dc0        0x0 ctx.o
+ .debug_line    0x0000000000000000     0x12a0 main.o
+ .debug_line    0x00000000000012a0      0x260 murmur3.o
+ .debug_line    0x0000000000001500      0x8a4 spooky.o
+ .debug_line    0x0000000000001da4     0x1338 lthread.o
+ .debug_line    0x00000000000030dc      0xf30 lthread_sched.o
+ .debug_line    0x000000000000400c      0xa37 lthread_cond.o
+ .debug_line    0x0000000000004a43      0x75c lthread_tls.o
+ .debug_line    0x000000000000519f      0x8bb lthread_mutex.o
+ .debug_line    0x0000000000005a5a      0x368 lthread_diag.o
+ .debug_line    0x0000000000005dc2        0x0 ctx.o
 
 .debug_frame
  *(.debug_frame)
@@ -10430,17 +10430,17 @@ per_lt          0x0000000000950598        0x8
 .debug_pubtypes
  *(.debug_pubtypes)
 
-.debug_ranges   0x0000000000000000     0xb4b0
+.debug_ranges   0x0000000000000000     0xb4c0
  *(.debug_ranges)
- .debug_ranges  0x0000000000000000     0x1da0 main.o
- .debug_ranges  0x0000000000001da0      0x3b0 murmur3.o
- .debug_ranges  0x0000000000002150      0x4d0 spooky.o
- .debug_ranges  0x0000000000002620     0x34b0 lthread.o
- .debug_ranges  0x0000000000005ad0     0x28b0 lthread_sched.o
- .debug_ranges  0x0000000000008380     0x1750 lthread_cond.o
- .debug_ranges  0x0000000000009ad0      0xa10 lthread_tls.o
- .debug_ranges  0x000000000000a4e0      0xfa0 lthread_mutex.o
- .debug_ranges  0x000000000000b480       0x30 lthread_diag.o
+ .debug_ranges  0x0000000000000000     0x1db0 main.o
+ .debug_ranges  0x0000000000001db0      0x3b0 murmur3.o
+ .debug_ranges  0x0000000000002160      0x4d0 spooky.o
+ .debug_ranges  0x0000000000002630     0x34b0 lthread.o
+ .debug_ranges  0x0000000000005ae0     0x28b0 lthread_sched.o
+ .debug_ranges  0x0000000000008390     0x1750 lthread_cond.o
+ .debug_ranges  0x0000000000009ae0      0xa10 lthread_tls.o
+ .debug_ranges  0x000000000000a4f0      0xfa0 lthread_mutex.o
+ .debug_ranges  0x000000000000b490       0x30 lthread_diag.o
 
 .debug_macro
  *(.debug_macro)

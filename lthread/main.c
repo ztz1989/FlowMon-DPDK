@@ -1288,7 +1288,7 @@ lthread_tx_per_ring(void *dummy)
 				}
 			}
 
-//			lthread_yield();
+			lthread_yield();
 		} else
 			lthread_cond_wait(ready, 0);
 	}
