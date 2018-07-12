@@ -914,9 +914,11 @@ flow_struct_init(uint32_t size)
 
 			f = f -> next;
 			f -> ctr = f -> rss_high = 0;
+
 			#ifdef IPG
-			f -> ipg = f -> avg = 0;
+				f -> ipg = f -> avg = 0;
 			#endif
+
 			f -> next = NULL;
 		}
 
@@ -935,7 +937,7 @@ lcore_main_count_linked_list(__attribute__((unused)) void *dummy)
 	uint8_t hit;
 
 #ifdef SD
-//      set_affinity(19,100);
+        set_affinity(19,100);
 #endif
 
 #ifdef IPG
@@ -967,10 +969,6 @@ lcore_main_count_linked_list(__attribute__((unused)) void *dummy)
 		for (buf = 0; buf < nb_rx; buf++)
 		{
 			hit = 0;
-
-//			uint32_t hash = bufs[buf] -> hash.rss;
-//			uint16_t hash_h = (hash & 0xffff0000) >> 16;
-//			uint16_t hash_l = hash & 0xffff;
 
 			index_l = bufs[buf]->hash.rss & result;
 			index_h = (bufs[buf]->hash.rss & b1) >> bits;
@@ -1039,9 +1037,6 @@ lcore_main_count_linked_list(__attribute__((unused)) void *dummy)
 			}
 
 		}
-
-//		for (buf = 0; buf < nb_rx; buf++)
-//			rte_pktmbuf_free(bufs[buf]);
 	}
 }
 
@@ -1060,9 +1055,10 @@ lcore_main_count_double_hash(__attribute__((unused)) void *dummy)
 	struct ipv4_hdr *ipv4_hdr;
         struct tcp_hdr *tcp;
 
-        union rte_thash_tuple ipv4_tuple;
+//        union rte_thash_tuple ipv4_tuple;
 
-	struct ipv4_5tuple ip;
+	struct ipv4_5tuple ip = {0,0,0,0,0};
+
         uint32_t hash;
 
         uint8_t default_rss_key[] = {
@@ -1095,9 +1091,6 @@ lcore_main_count_double_hash(__attribute__((unused)) void *dummy)
 
 		gCtr[q] += nb_rx;
 
-//		for (buf = 0; buf < nb_rx; buf++)
-//			rte_pktmbuf_free(bufs[buf]);
-
 		#ifdef IPG
 			unsigned qNum = n_rx_thread;
 			global = 0;
@@ -1107,27 +1100,21 @@ lcore_main_count_double_hash(__attribute__((unused)) void *dummy)
 
                 for (buf = 0; buf < nb_rx; buf++)
                 {
-/*                        ipv4_hdr = (struct ipv4_hdr *)(rte_pktmbuf_mtod(bufs[buf], struct ether_hdr *) + 1);
+#ifdef HASH
+                        ipv4_hdr = (struct ipv4_hdr *)(rte_pktmbuf_mtod(bufs[buf], struct ether_hdr *) + 1);
                         //ipv4_tuple.v4.src_addr = rte_be_to_cpu_32(ipv4_hdr->src_addr);
                         //ipv4_tuple.v4.dst_addr = rte_be_to_cpu_32(ipv4_hdr->dst_addr);
-			//ip.proto = ipv4_hdr->next_proto_id;
+			ip.proto = ipv4_hdr->next_proto_id;
                         ip.ip_src = rte_be_to_cpu_32(ipv4_hdr->src_addr);
 			ip.ip_dst = rte_be_to_cpu_32(ipv4_hdr->dst_addr);
 
                         tcp = (struct tcp_hdr *)((unsigned char *)ipv4_hdr + sizeof(struct ipv4_hdr));
-                        //ipv4_tuple.v4.sport = rte_be_to_cpu_16(tcp->src_port);
-                        //ipv4_tuple.v4.dport = rte_be_to_cpu_16(tcp->dst_port);
        			ip.port_src = rte_be_to_cpu_16(tcp->src_port);
 			ip.port_dst = rte_be_to_cpu_16(tcp->dst_port);
-	                //printf("%u %u %u\n", ipv4_hdr->next_proto_id, ipv4_tuple.dport, ipv4_tuple.sport);
 
-                        //hash = rte_softrss_be((uint32_t *)&ipv4_tuple, RTE_THASH_V4_L3_LEN, converted_rss_key);
-                        //hash = ipv4_tuple.v4.src_addr + ipv4_tuple.v4.dst_addr + ipv4_tuple.v4.sport + ipv4_tuple.v4.dport;
-                        //hash = ipv4_tuple.v4.src_addr ^ ipv4_tuple.v4.dst_addr ^ ipv4_tuple.v4.sport ^ ipv4_tuple.v4.dport;
-                        //MurmurHash3_x64_128(&ipv4_tuple, sizeof(ipv4_tuple), 1, &hash);
-                        //hash = spooky_hash32(&ipv4_tuple,sizeof(ipv4_tuple), 1);
+	                //printf("%u %u %u\n", ipv4_hdr->next_proto_id, ipv4_tuple.dport, ipv4_tuple.sport); //For verification, never use it at runtime in production.
 
-			hash = rte_softrss_be((uint32_t *)&ip, 2, converted_rss_key);
+			hash = rte_softrss_be((uint32_t *)&ip, sizeof(struct ipv4_5tuple)/4, converted_rss_key);
 //			hash = ip.ip_src + ip.ip_dst + ip.port_src + ip.port_dst + ip.proto;
 //			hash = ip.ip_src ^ ip.ip_dst ^ ip.port_src ^ ip.port_dst ^ ip.proto;
 //			MurmurHash3_x64_128(&ip, sizeof(ip), 1, &hash);
@@ -1136,14 +1123,14 @@ lcore_main_count_double_hash(__attribute__((unused)) void *dummy)
 
                         index_l = hash & 0xffff;
                         index_h = (hash & 0xffff0000) >> 16;
-
-			//index_l = bufs[buf]->hash.rss & 0xffff;
-*/			//index_h = (bufs[buf]->hash.rss & 0xffff0000)>>16;
+#else
 			index_l = bufs[buf]->hash.rss & result;
 			index_h = (bufs[buf]->hash.rss & b1)>>bits;
 
 			rte_pktmbuf_free(bufs[buf]);
+#endif
 
+#ifdef FLOW_LEVEL
 			if(pkt_ctr[index_l].hi_f1 == 0)
 			{
 				pkt_ctr[index_l].hi_f1 = index_h;
@@ -1192,7 +1179,7 @@ lcore_main_count_double_hash(__attribute__((unused)) void *dummy)
 					#endif
 				}
 			}
-
+#endif
                 }
 	}
 }
