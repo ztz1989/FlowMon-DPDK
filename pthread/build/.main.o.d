@@ -61,6 +61,7 @@ dep_main.o = /home/tzhang/FlowMon-DPDK/pthread/main.c \
  /usr/include/x86_64-linux-gnu/bits/mathdef.h \
  /usr/include/x86_64-linux-gnu/bits/mathcalls.h \
  /usr/include/x86_64-linux-gnu/bits/mathinline.h \
+ /usr/include/x86_64-linux-gnu/sys/time.h \
  /home/tzhang/dpdk-stable-17.05.1/x86_64-native-linuxapp-gcc/include/rte_eal.h \
  /usr/include/sched.h /usr/include/x86_64-linux-gnu/bits/sched.h \
  /home/tzhang/dpdk-stable-17.05.1/x86_64-native-linuxapp-gcc/include/rte_per_lcore.h \

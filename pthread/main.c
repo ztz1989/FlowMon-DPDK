@@ -15,6 +15,7 @@
 #include <getopt.h>
 #include <unistd.h>
 #include <math.h>
+#include <sys/time.h>
 
 #include <rte_eal.h>
 #include <rte_ethdev.h>
@@ -41,17 +42,21 @@
 #define BURST_SIZE 256
 #define MAX_RX_QUEUE_PER_PORT 128
 #define MAX_RX_DESC 4096
+
 #define RX_RING_SZ 65536
+
 #define WRITE_FILE
 #define MAX_LCORE_PARAMS 1024
 #define MAX_RX_QUEUE_PER_LCORE 16
 #define NB_SOCKETS 4
 #define NB_MBUF 4096
+//#define SD
 
 int bits, b1;
 uint32_t result = 0;
 
-//#define SD
+struct timeval start, stop;
+double th = 0;
 
 #ifdef SD
 	#include "sched_deadline_init.h"
@@ -94,7 +99,7 @@ static uint8_t hash_key[RSS_HASH_KEY_LENGTH] = {
         0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A,
         0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A,
         0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A,
-        0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A, 
+        0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A, 0x6D, 0x5A,
 };
 
 static struct rte_eth_conf port_conf = {
@@ -110,7 +115,7 @@ static struct rte_eth_conf port_conf = {
 	},
 	.rx_adv_conf = {
 		.rss_conf = {
-			.rss_key = hash_key,
+			.rss_key = NULL,//hash_key,
 			.rss_hf = ETH_RSS_PROTO_MASK,
 		}
 	},
@@ -650,7 +655,6 @@ static inline void
 lcore_main_rx(__attribute__((unused)) void *dummy)
 {
 	uint8_t port;
-	//uint32_t buf;
 	int q;
 
 	unsigned lcore_id;
@@ -662,14 +666,18 @@ lcore_main_rx(__attribute__((unused)) void *dummy)
 	q = rx_conf->rx_queue_list[0].queue_id;
 	port = rx_conf->rx_queue_list[0].port_id;
 
+//	struct timeval stop, start;
+
 #ifdef SD
-        set_affinity(13,20);
+        set_affinity(3,4);
 #endif
 
 	printf("[Runtime settings]: lcore %u checks queue %d\n", lcore_id, q);
 
 	for (;;)
 	{
+//		gettimeofday(&start, NULL);
+
 		struct rte_mbuf *bufs[burst_size];
 
 		const uint16_t nb_rx = rte_eth_rx_burst(port, q,
@@ -680,11 +688,15 @@ lcore_main_rx(__attribute__((unused)) void *dummy)
 
 		rte_ring_enqueue_burst(rx_conf->ring[0],
                                 (void *)bufs, nb_rx, NULL);
+
+//		gettimeofday(&stop, NULL);
+
+//		printf("took %lf\n", (double)(stop.tv_usec - start.tv_usec) / 1000000 + (double)(stop.tv_sec - start.tv_sec));
 	}
 }
 
 /*
- * The lcore main. This is the main thread that does the per-flow statistics
+ * The lcore main. This is the main thread that does the packet processing (meta-data processing)
  */
 #ifdef HASH_LIST
 static inline void
@@ -743,27 +755,6 @@ lcore_main_count_hash_list(__attribute__((unused)) void *dummy)
 		/* Per packet processing */
                 for (buf = 0; buf < nb_rx; buf++)
                 {
-/*			ipv4_hdr = (struct ipv4_hdr *)(rte_pktmbuf_mtod(bufs[buf], struct ether_hdr *) + 1);
-                        ipv4_tuple.v4.src_addr = rte_be_to_cpu_32(ipv4_hdr->src_addr);
-                        ipv4_tuple.v4.dst_addr = rte_be_to_cpu_32(ipv4_hdr->dst_addr);
-                        //ipv4_tuple.proto = ipv4_hdr->next_proto_id;
-
-                        tcp = (struct tcp_hdr *)((unsigned char *)ipv4_hdr + sizeof(struct ipv4_hdr));
-                        ipv4_tuple.v4.sport = rte_be_to_cpu_16(tcp->src_port);
-                        ipv4_tuple.v4.dport = rte_be_to_cpu_16(tcp->dst_port);
-                        //printf("%u %u %u\n", ipv4_hdr->next_proto_id, ipv4_tuple.dport, ipv4_tuple.sport);
-
-                        hash = rte_softrss_be((uint32_t *)&ipv4_tuple, RTE_THASH_V4_L3_LEN, converted_rss_key);
-                        //hash = ipv4_tuple.v4.src_addr + ipv4_tuple.v4.dst_addr + ipv4_tuple.v4.sport + ipv4_tuple.v4.dport;
-                        //hash = ipv4_tuple.v4.src_addr ^ ipv4_tuple.v4.dst_addr ^ ipv4_tuple.v4.sport ^ ipv4_tuple.v4.dport;
-                        //MurmurHash3_x64_128(&ipv4_tuple, sizeof(ipv4_tuple), 1, &hash);
-                        //hash = spooky_hash32(&ipv4_tuple,sizeof(ipv4_tuple), 1);
-
-			rte_pktmbuf_free(bufs[buf]);
-
-                        index_l = hash & 0xffff;
-                        index_h = (hash & 0xffff0000) >> 16;
-*/
 			index_l = bufs[buf]->hash.rss & 0xffff;
 			index_h = (bufs[buf]->hash.rss & 0xffff0000)>>16;
 			rte_pktmbuf_free(bufs[buf]);
@@ -1055,7 +1046,7 @@ lcore_main_count_double_hash(__attribute__((unused)) void *dummy)
 	struct ipv4_hdr *ipv4_hdr;
         struct tcp_hdr *tcp;
 
-//        union rte_thash_tuple ipv4_tuple;
+//      union rte_thash_tuple ipv4_tuple;
 
 	struct ipv4_5tuple ip = {0,0,0,0,0};
 
@@ -1080,11 +1071,8 @@ lcore_main_count_double_hash(__attribute__((unused)) void *dummy)
 	q = tx_conf->conf.thread_id;
 	printf("lcore %d dequeues queue %u\n", lcore_id, tx_conf->conf.thread_id);
 
-	//struct flow_entry *f, *tmp;
-
 	for(;;)
 	{
-		//struct rte_mbuf *bufs[burst_size];
 		nb_rx = rte_ring_dequeue_burst(tx_conf->ring, (void *)bufs, burst_size, NULL);
 		if (unlikely(nb_rx == 0))
                         continue;
@@ -1102,27 +1090,25 @@ lcore_main_count_double_hash(__attribute__((unused)) void *dummy)
                 {
 #ifdef HASH
                         ipv4_hdr = (struct ipv4_hdr *)(rte_pktmbuf_mtod(bufs[buf], struct ether_hdr *) + 1);
-                        //ipv4_tuple.v4.src_addr = rte_be_to_cpu_32(ipv4_hdr->src_addr);
-                        //ipv4_tuple.v4.dst_addr = rte_be_to_cpu_32(ipv4_hdr->dst_addr);
 			ip.proto = ipv4_hdr->next_proto_id;
                         ip.ip_src = rte_be_to_cpu_32(ipv4_hdr->src_addr);
 			ip.ip_dst = rte_be_to_cpu_32(ipv4_hdr->dst_addr);
 
                         tcp = (struct tcp_hdr *)((unsigned char *)ipv4_hdr + sizeof(struct ipv4_hdr));
-       			ip.port_src = rte_be_to_cpu_16(tcp->src_port);
+     			ip.port_src = rte_be_to_cpu_16(tcp->src_port);
 			ip.port_dst = rte_be_to_cpu_16(tcp->dst_port);
 
-	                //printf("%u %u %u\n", ipv4_hdr->next_proto_id, ipv4_tuple.dport, ipv4_tuple.sport); //For verification, never use it at runtime in production.
+			//printf("%u %u %u\n", ipv4_hdr->next_proto_id, ipv4_tuple.dport, ipv4_tuple.sport); //For verification, never use it at runtime in production.
 
-			hash = rte_softrss_be((uint32_t *)&ip, sizeof(struct ipv4_5tuple)/4, converted_rss_key);
+			hash = rte_softrss_be((uint32_t *)&ip, 2, converted_rss_key);
 //			hash = ip.ip_src + ip.ip_dst + ip.port_src + ip.port_dst + ip.proto;
 //			hash = ip.ip_src ^ ip.ip_dst ^ ip.port_src ^ ip.port_dst ^ ip.proto;
 //			MurmurHash3_x64_128(&ip, sizeof(ip), 1, &hash);
 //			hash = spooky_hash32(&ip,sizeof(ip), 1);
                         rte_pktmbuf_free(bufs[buf]);
 
-                        index_l = hash & 0xffff;
-                        index_h = (hash & 0xffff0000) >> 16;
+                        index_l = hash & result;
+                        index_h = (hash & 0xffff0000) >> bits;
 #else
 			index_l = bufs[buf]->hash.rss & result;
 			index_h = (bufs[buf]->hash.rss & b1)>>bits;
@@ -1188,6 +1174,12 @@ lcore_main_count_double_hash(__attribute__((unused)) void *dummy)
 static void handler(int sig)
 {
 	int portid, i;
+	double secs = 0;
+
+	gettimeofday(&stop, NULL);
+
+	secs = (double)(stop.tv_usec - start.tv_usec) / 1000000 + (double)(stop.tv_sec - start.tv_sec);
+	printf("time taken %f\n",secs);
 
 	printf("\nSignal %d received\n", sig);
 
@@ -1213,6 +1205,12 @@ static void handler(int sig)
 		printf("\nValue of global counter: %lu\n", sum);
 
 		sum = 0;
+
+	        gettimeofday(&stop, NULL);
+
+	        secs = (double)(stop.tv_usec - start.tv_usec) / 1000000 + (double)(stop.tv_sec - start.tv_sec);
+	        printf("time taken %f\n",secs);
+
 #ifdef HASH_LIST
 		struct flow_entry *f;
 
@@ -1280,7 +1278,7 @@ static void handler(int sig)
 	{
 		FILE *fp;
 		fp = fopen("./tmp.txt", "a");
-		fprintf(fp, "%lu %lu %lu %lu %lu\n", eth_stats.ipackets + eth_stats.imissed + eth_stats.ierrors, eth_stats.imissed, gCtr[0], gCtr[1], sum);
+		fprintf(fp, "%lu %lu %lu %lu %lu %lf\n", eth_stats.ipackets + eth_stats.imissed + eth_stats.ierrors, eth_stats.imissed, gCtr[0], gCtr[1], sum, secs);
 		fclose(fp);
 	}
 
@@ -1530,7 +1528,10 @@ int main(int argc, char **argv)
 		}
 	}
 #endif
+
 	rte_eal_mp_remote_launch(pthread_run, NULL, SKIP_MASTER);
+
+	gettimeofday(&start, NULL);
 
 	while(1)
 		rte_timer_manage();

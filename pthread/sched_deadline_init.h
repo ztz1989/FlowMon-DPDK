@@ -3,10 +3,11 @@
 #include <linux/types.h>
 #include <sys/syscall.h>
 #include <pthread.h>
+#include <sched.h>
 
 #define gettid() syscall(__NR_gettid)
 
-#define SCHED_DEADLINE 6
+#define SCHED_DEADLINE 7
 
 /* use the proper syscall numbers */
 #ifdef __x86_64__
@@ -77,13 +78,15 @@ static void set_affinity(int runtime, int period)
 
         attr.sched_flags = 0;
         attr.sched_nice = 0;
-        attr.sched_priority = 0;
+        attr.sched_priority = 5;
 
-        attr.sched_policy = SCHED_DEADLINE;
+        attr.sched_policy = SCHED_FIFO;//DEADLINE;
+
+/*
         attr.sched_runtime = runtime * 1000;
         attr.sched_period = period * 1000;
 	attr.sched_deadline = period * 1000;
-
+*/
         ret = sched_setattr(0, &attr, flags);
         if (ret < 0) {
                 done = 0;

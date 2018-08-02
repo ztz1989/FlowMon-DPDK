@@ -1,11 +1,12 @@
+
 #define DOUBLE_HASH
 //#define LINKED_LIST
 //#define HASH_LIST
 
-//#define FLOW_LEVEL
+#define FLOW_LEVEL
 //#define IPG
 
-#define HASH
+//#define HASH
 
 #define ENTRY_PER_FLOW 1
 #define FLOW_NUM 65536
