@@ -6,7 +6,7 @@
 #define FLOW_LEVEL
 //#define IPG
 
-//#define HASH
+#define HASH
 
 #define ENTRY_PER_FLOW 1
 #define FLOW_NUM 65536

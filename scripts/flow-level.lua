@@ -6,7 +6,7 @@ local log    = require "log"
 local lm     = require "libmoon"
 
 ft = {}
-local FLOW_NUM = 65536
+FLOW_NUM = 65536
 
 for i = 1, FLOW_NUM do
 	ft[i-1] = {}
@@ -21,6 +21,7 @@ function master(args)
 	local rxDev = device.config{port = args.rxDev, rxQueues = args.rxq, rssQueues = args.rxq, numBufs = 8192, dropEnable = false, rxDescs=4096}
 	device.waitForLinks()
 	stats.startStatsTask{rxDevices={rxDev}}
+
 	for i = 1, args.rxq do
 		lm.startTask("dumpSlave", rxDev, rxDev:getRxQueue(i-1))
 	end
@@ -29,7 +30,7 @@ function master(args)
 	-- Query the NIC for Dev statistics
 	local f = io.open("tmp.txt", "a")
 	local stats = rxDev:getStats()
-	print("Total missed packets: " .. tostring(stats.imissed))
+--	io.write("Total missed packets: " .. tostring(stats.imissed))
 	f:write(tostring(stats.ipackets+stats.imissed) .. " " .. tostring(stats.imissed) .. "\n")
 	f:close()
 end
@@ -59,13 +60,17 @@ function dumpSlave(rxDev, queue)
 
 	pktCtr:finalize()
 --[[
+	local flows = 0
 	for i = 0, FLOW_NUM-1 do
 --		io.write("Flow entry " .. i .. ': ')
 
 		for j,k in pairs(ft[i]) do
-			io.write(j .. ' ' .. k .. ' ')
+			flows = flows + 1
+--			io.write(j .. ' ' .. k .. ' ')		
 		end
+
 --		io.write('\n')
 	end
+	io.write("total number of flows:" .. flows)
 --]]
 end

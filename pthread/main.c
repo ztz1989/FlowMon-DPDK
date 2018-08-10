@@ -1048,6 +1048,11 @@ lcore_main_count_double_hash(__attribute__((unused)) void *dummy)
 
 //      union rte_thash_tuple ipv4_tuple;
 
+
+#ifdef SD
+        set_affinity(3,4);
+#endif
+
 	struct ipv4_5tuple ip = {0,0,0,0,0};
 
         uint32_t hash;
@@ -1095,7 +1100,7 @@ lcore_main_count_double_hash(__attribute__((unused)) void *dummy)
 			ip.ip_dst = rte_be_to_cpu_32(ipv4_hdr->dst_addr);
 
                         tcp = (struct tcp_hdr *)((unsigned char *)ipv4_hdr + sizeof(struct ipv4_hdr));
-     			ip.port_src = rte_be_to_cpu_16(tcp->src_port);
+   			ip.port_src = rte_be_to_cpu_16(tcp->src_port);
 			ip.port_dst = rte_be_to_cpu_16(tcp->dst_port);
 
 			//printf("%u %u %u\n", ipv4_hdr->next_proto_id, ipv4_tuple.dport, ipv4_tuple.sport); //For verification, never use it at runtime in production.

@@ -58,12 +58,12 @@
 int bits, b1;
 uint32_t result = 0;
 
-#define DOUBLE_HASH
+//#define DOUBLE_HASH
 //#define LINKED_LIST
-//#define HASH_LIST
+#define HASH_LIST
 
 
-//#define IPG
+#define IPG
 #define ENTRY_PER_FLOW 1
 
 #ifdef SD
@@ -413,7 +413,7 @@ static void timer_cb(__attribute__((unused)) struct rte_timer *tim,
 			printf("[IPG] Average IPG: %.0lf, stdDev %lf\n", pkt_ctr[65246].avg[0], pkt_ctr[65246].stdDev[0]);
 		#endif
 		#ifdef HASH_LIST
-			printf("[IPG] Average IPG: %.0lf, stdDev %lf\n", pkt_ctr[65246].avg[0], pkt_ctr[65246].stdDev[0]);
+			printf("[IPG] Average IPG: %.0lf, stdDev %lf\n", pkt_ctr[65].avg[0], pkt_ctr[65].stdDev[0]);
 		#endif
 	#endif
 
@@ -902,8 +902,10 @@ lcore_main_count_hash_list(__attribute__((unused)) void *dummy)
 				global += gCtr[--qNum];
 		#endif
 
+		for (buf = 0; buf < nb_rx; buf++)
+			 rte_pktmbuf_free(bufs[buf]);
 		/* Per packet processing */
-                for (buf = 0; buf < nb_rx; buf++)
+/*              for (buf = 0; buf < nb_rx; buf++)
                 {
 			index_l = bufs[buf]->hash.rss & 0xffff;
 			index_h = (bufs[buf]->hash.rss & 0xffff0000)>>16;
@@ -1012,7 +1014,7 @@ lcore_main_count_hash_list(__attribute__((unused)) void *dummy)
 				}
 			}
                 }
-
+*/
 	}
 }
 #endif
@@ -1328,7 +1330,7 @@ static void handler(int sig)
 			{
 				if (f->ctr > 0)
 					sum += 1;
-				sum += f->ctr;
+//				sum += f->ctr;
 //				printf("%u: %u  ", f->rss_high, f->ctr);
 				f= f->next;
 			}

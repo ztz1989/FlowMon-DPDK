@@ -80,10 +80,9 @@ static void set_affinity(int runtime, int period)
         attr.sched_nice = 0;
         attr.sched_priority = 5;
 
-        attr.sched_policy = SCHED_FIFO;//DEADLINE;
+        attr.sched_policy = SCHED_RR;//DEADLINE;
 
-/*
-        attr.sched_runtime = runtime * 1000;
+/*      attr.sched_runtime = runtime * 1000;
         attr.sched_period = period * 1000;
 	attr.sched_deadline = period * 1000;
 */

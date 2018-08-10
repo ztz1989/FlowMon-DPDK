@@ -24,4 +24,4 @@ struct ipv4_5tuple {
 	uint32_t ip_dst;
 	uint16_t port_src;
 	uint16_t port_dst;
-}__rte_cache_aligned;
+};

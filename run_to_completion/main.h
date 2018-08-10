@@ -30,16 +30,16 @@
 #define BURST_SIZE 256
 
 #define RX_RINGS 2
-#define PORT_ID 1
+#define PORT_ID 2
 
 /* 3 data structure macros*/
 
 //#define DOUBLE_HASH
-#define LINKED_LIST
-//#define HASH_LIST
+//#define LINKED_LIST
+#define HASH_LIST
 
 /* Parameters for per-flow stats */
-//#define IPG
+#define IPG
 
 //#define TIMESTAMP
 //#define DEBUG_FLOW
