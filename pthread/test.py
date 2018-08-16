@@ -1,9 +1,11 @@
 #!/usr/bin/python
-# The script to test the RX functionality
+# The script to test the performance of FlowMon-DPDK
 # Usage: ./test.py port_no
 # Wrapper for the following commands:
-# sudo ./build/FlowMon-DPDK -l 0,2,4,6,8 -- -P -p 8 --rx="(3,0,2,0)(3,1,4,1)" --tx="(6,0)(8,1)"
-# sudo ./build/FlowMon-DPDK --lcores="0,(1,3)@1,(2,4)@2" -c 1F -n 4 -- -P -p 8 --rx="(3,0,1,0)(3,1,2,1)" --tx="(3,0)(4,1)"
+# Pipeline usage:
+# 		sudo ./build/FlowMon-DPDK -l 0,2,4,6,8 -- -P -p 8 --rx="(3,0,2,0)(3,1,4,1)" --tx="(6,0)(8,1)"
+# Sched_deadline Usage:
+#         	sudo ./build/FlowMon-DPDK --lcores="0,(1,3)@1,(2,4)@2" -c 1F -n 4 -- -P -p 8 --rx="(3,0,1,0)(3,1,2,1)" --tx="(3,0)(4,1)"
 
 import subprocess, time, signal, random, sys
 
