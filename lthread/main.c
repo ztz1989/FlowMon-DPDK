@@ -112,8 +112,6 @@ struct lcore_rx_queue {
 } __rte_cache_aligned;
 
 #define MAX_RX_QUEUE_PER_LCORE 16
-//#define MAX_TX_QUEUE_PER_PORT  RTE_MAX_ETHPORTS
-//#define MAX_RX_QUEUE_PER_PORT  128
 
 #define MAX_LCORE_PARAMS       1024
 struct rx_thread_params {
@@ -220,37 +218,10 @@ static int batch_n[RX_RINGS];
 #define IPG
 #define NC
 
-/*
-uint8_t default_rss_key[] = {
-	0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a,
-	0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a,
-	0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a,
-	0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a,
-	0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a,
-};
-
-
-uint8_t default_rss_key[] = {
-        0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01,
-        0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01,
-        0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01,
-        0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01,
-        0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01,
-};
-
-
-uint8_t default_rss_key[] = {
-	0x6d, 0x5a, 0x56, 0xda, 0x25, 0x5b, 0x0e, 0xc2,
-	0x41, 0x67, 0x25, 0x3d, 0x43, 0xa3, 0x8f, 0xb0,
-	0xd0, 0xca, 0x2b, 0xcb, 0xae, 0x7b, 0x30, 0xb4,
-	0x77, 0xcb, 0x2d, 0xa3, 0x80, 0x30, 0xf2, 0x0c,
-	0x6a, 0x42, 0xb7, 0x3b, 0xbe, 0xac, 0x01, 0xfa,
-};
-*/
-
 uint8_t converted_rss_key[RTE_DIM(default_rss_key)];
 
 #ifdef NC
+#define NUM_SHOWN 20
 static inline
 void init_gui(void)
 {
@@ -263,24 +234,12 @@ void init_gui(void)
 	init_pair(1, COLOR_YELLOW, COLOR_BLACK);
 }
 
-static inline
-void print_list(void)
+struct nc_flow
 {
-	int x, y;
-	WINDOW *win;
-	char msg[] = "Statistics of FlowMon-DPDK";
-	int len = strlen(msg);
-
-	getmaxyx(stdscr, y, x);
-	win = newwin(4, 2*len, 1, y/2);
-
-	box(win, '|', '-');
-	attron(A_STANDOUT);
-	mvprintw(2, 0.75*y, msg);
-	attroff(A_STANDOUT);
-        touchwin(win);
-        wrefresh(win);
-}
+        uint16_t hi,lo;
+        uint32_t ctr;
+        double avg, stdDev;
+};
 #endif
 
 //#define QUANTILE
@@ -405,7 +364,6 @@ void init(struct quantile *qt)
 
 #ifdef DOUBLE_HASH
 	//static inline void double_hash(int);
-
 	struct pkt_count
 	{
         	uint16_t hi_f1;
@@ -493,10 +451,12 @@ void init(struct quantile *qt)
 
 static struct pkt_count pkt_ctr[FLOW_NUM]__rte_cache_aligned;
 
+uint16_t flow_counter = 0;
 static void timer_cb(__attribute__((unused)) struct rte_timer *tim,
 			__attribute__((unused)) void *arg)
 {
-	uint8_t i;
+	uint16_t i = 0, z, k;
+	struct nc_flow t;
 	double j = 0;
 	static double old = 0;
 
@@ -513,9 +473,34 @@ static void timer_cb(__attribute__((unused)) struct rte_timer *tim,
 	rte_eth_stats_get(portid, &eth_stats);
 
 #ifdef NC
-	print_list();
-	mvprintw(10, 5, "RX rate: %.2lf Mpps, Total RX pkts: %.0lf, Total dropped pkts: %lu\n",
-						 (j - old)/1000000, j, eth_stats.imissed);
+        int x, y;
+	struct nc_flow tmp[NUM_SHOWN] = {{0,0,0,0,0}};
+        WINDOW *win;
+        char msg[] = "  FlowMon-DPDK Sigcomm Demo  ";
+        char msg1[] = "Dario Rossi  NewNet@Paris";
+        int len = strlen(msg);
+
+        getmaxyx(stdscr, y, x);
+        win = newwin(6, 0.5*x, 1, x/4);
+
+        box(win, '|', '-');
+        attron(A_STANDOUT|A_BOLD);
+        mvprintw(3, 0.5*x-0.5*len, msg);
+        attroff(A_STANDOUT|A_BOLD);
+        attron(A_BOLD);
+        mvprintw(5, 0.5*x, msg1);
+
+        touchwin(win);
+        wrefresh(win);
+
+	mvprintw(8, x/16, "Packet-level Statistics");
+	attroff(A_BOLD);
+	mvprintw(9, x/8, "Throughput:\t\t%.2lf Mpps", (j - old)/1000000);
+	mvprintw(10, x/8, "Received pkts: \t%.0lf", j);
+	mvprintw(11, x/8, "Received bytes: \t%lu", eth_stats.ibytes);
+	mvprintw(12, x/8, "Dropped pkts:\t\t%lu", eth_stats.imissed);
+	mvprintw(13, x/8, "Drop ratio:\t\t%lf%%", 100.0*(double)eth_stats.imissed/j);
+	mvprintw(14, x/8, "Erronous pkts: \t%lu", eth_stats.ierrors);
 #else
 	printf("RX rate: %.2lf Mpps, Total RX pkts: %.0lf, Total dropped pkts: %lu\n",
                                                  (j - old)/1000000, j, eth_stats.imissed);
@@ -524,12 +509,84 @@ static void timer_cb(__attribute__((unused)) struct rte_timer *tim,
 
 	#ifdef IPG
 		#ifdef NC
+		attron(A_BOLD);
+		mvprintw(8, 0.5*x, "Flow-level Statistics");
+		mvprintw(9, 0.5*x, " Flow id      Total Pkts    Inter-leaving     StdDev\n");
+		attroff(A_BOLD);
+		i = flow_counter;
+		int target = 0;
 
-		printw("\n\tFlow id \tPkts \tIPG \tstdDev IPG\n");
-		for (i=0; i<20; i++)
+/*		while (1)
 		{
-			printw("\t[Flow %d]: \t%lu, \t%.0lf, \t%lf\n", i+1, pkt_ctr[i].ctr[0], pkt_ctr[i].avg[0], pkt_ctr[i].stdDev[0]);
+			if (pkt_ctr[i].ctr[0]!=0)
+			{
+				mvprintw(10 + target, x/2, "[Flow %d]:\t%lu           %.0lf          %.0lf\n",
+					pkt_ctr[i].hi_f1, pkt_ctr[i].ctr[0], pkt_ctr[i].avg[0], pkt_ctr[i].stdDev[0]);
+				target++;
+
+				if (target == NUM_SHOWN)
+				{
+					flow_counter = i;
+					break;
+				}
+
+				if (pkt_ctr[i].ctr[1]!=0)
+				{
+		                        mvprintw(11 + target, x/2, "[Flow %d]:\t%lu           %.0lf          %.0lf\n",
+					pkt_ctr[i].hi_f2, pkt_ctr[i].ctr[1], pkt_ctr[i].avg[1], pkt_ctr[i].stdDev[1]);
+                	                target++;
+	                                if (target == NUM_SHOWN)
+					{
+						flow_counter = i;
+        	                                break;
+					}
+				}
+			}
+			i++;
 		}
+*/
+		while (1)
+		{
+			if (pkt_ctr[i].ctr[0]>0)
+                        {
+				tmp[target].ctr = pkt_ctr[i].ctr[0];
+				tmp[target].hi = pkt_ctr[i].hi_f1;
+				tmp[target].lo = i;
+				tmp[target].avg = pkt_ctr[i].avg[0];
+				tmp[target].stdDev = pkt_ctr[i].stdDev[0];
+				target++;
+				if (target == NUM_SHOWN)
+				{
+					flow_counter = i;
+					break;
+				}
+			}
+                        if (pkt_ctr[i].ctr[1]>0)
+                        {
+                                tmp[target].ctr = pkt_ctr[i].ctr[1];
+				tmp[target].hi = pkt_ctr[i].hi_f2;
+     				tmp[target].lo = i;
+                                tmp[target].avg = pkt_ctr[i].avg[1];
+                                tmp[target].stdDev = pkt_ctr[i].stdDev[1];
+                                target++;
+                                if (target == NUM_SHOWN)
+				{
+					flow_counter = i;
+                                        break;
+				}
+                        }
+			i++;
+		}
+
+		for (k=0;k<NUM_SHOWN-1;k++)
+		{
+			for(z=0;z<NUM_SHOWN-k-1;z++)
+				if(tmp[z].ctr>tmp[z+1].ctr) {t=tmp[z];tmp[z]=tmp[z+1];tmp[z+1]=t;}
+			mvprintw(10 + k, x/2, "[Flow %d]:\t%lu           %.0lf          %.0lf\n",
+					tmp[NUM_SHOWN-k-1].hi, tmp[NUM_SHOWN-k-1].ctr, tmp[NUM_SHOWN-k-1].avg, tmp[NUM_SHOWN-k-1].stdDev);
+		}
+		mvprintw(10 + k, x/2, "[Flow %d]:\t%lu           %.0lf          %.0lf\n",
+                                        tmp[NUM_SHOWN-k-1].hi, tmp[NUM_SHOWN-k-1].ctr, tmp[NUM_SHOWN-k-1].avg, tmp[NUM_SHOWN-k-1].stdDev);
 
 		#else
 			printf("[IPG] Average IPG: %.0lf, stdDev %lf\n", pkt_ctr[65246].avg[0], pkt_ctr[65246].stdDev[0]);
@@ -1409,7 +1466,7 @@ static void handler(int sig __rte_unused)
 	uint64_t sum = 0;
 
 #ifdef NC
-	print_list();
+//	print_list();
 	attron(A_STANDOUT);
 	mvprintw(10, 5, "Summary: \n");
 	attroff(A_STANDOUT);
