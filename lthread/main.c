@@ -1466,10 +1466,11 @@ static void handler(int sig __rte_unused)
 	uint64_t sum = 0;
 
 #ifdef NC
-//	print_list();
-	attron(A_STANDOUT);
-	mvprintw(10, 5, "Summary: \n");
-	attroff(A_STANDOUT);
+	int x, y;
+	getmaxyx(stdscr, y, x);
+	attron(A_BOLD);
+	mvprintw(7, x/16, "Summary of the session:");
+	clrtobot();
 #endif
 
         for (portid = 0; portid < nb_ports; portid++)
@@ -1482,10 +1483,17 @@ static void handler(int sig __rte_unused)
 //	rte_eth_dev_stop(portid);
 
 	#ifdef NC
-	attron(A_BLINK | COLOR_PAIR(1));
-        printw("\t[DPDK counting]: Received pkts %lu \n\t\tDropped packets: %lu \n\t\tErroneous packets: %lu\n",
-				eth_stats.ipackets + eth_stats.imissed + eth_stats.ierrors,
-				eth_stats.imissed, eth_stats.ierrors);
+        //mvprintw(8, x/4, "[DPDK counting]: Received pkts %lu \n\t\tDropped packets: %lu \n\t\tErroneous packets: %lu\n",
+	//			eth_stats.ipackets + eth_stats.imissed + eth_stats.ierrors,
+	//			eth_stats.imissed, eth_stats.ierrors);
+	mvprintw(8,x/16+2, "Packet-level statistics:");
+	attroff(A_BOLD);
+	mvprintw(10, x/16+4, "Total received packets:\t\t %lu", eth_stats.ipackets);
+	mvprintw(11, x/16+4, "Total received bytes:\t\t %lu", eth_stats.ibytes);
+	mvprintw(12, x/16+4, "Total dropped packets:\t\t %lu", eth_stats.imissed);
+	mvprintw(13, x/16+4, "Packet drop Ratio:   \t\t %lf%%", 100*eth_stats.imissed/eth_stats.ipackets);
+	mvprintw(14, x/16+4, "Erroneous packets:   \t\t %lu", eth_stats.ierrors);
+
 	#else
 	printf("\t[DPDK counting]: Received pkts %lu \n\t\tDropped packets: %lu \n\t\tErroneous packets: %lu\n",
                                 eth_stats.ipackets + eth_stats.imissed + eth_stats.ierrors,
@@ -1493,20 +1501,22 @@ static void handler(int sig __rte_unused)
 	#endif
 
 	#ifdef NC
-		printw("\t[Software counting]: ");
+		attron(A_BOLD);
+		mvprintw(8, x/2+2, "Flow-level statistics: ");
+		attroff(A_BOLD);
 	#else
 		printf("\t[Software counting]:");
 	#endif
 
 	for (i = 0; i < n_rx_thread; i++)
 		#ifdef NC
-			printw("%lu(%lf) ", re[i], 1.0*re[i]/batch_n[i]);
+			;//printw("%lu(%lf) ", re[i], 1.0*re[i]/batch_n[i]);
 		#else
 			printf("%lu(%lf) ", re[i], 1.0*re[i]/batch_n[i]);
 		#endif
 
 	#ifdef NC
-		printw("\n");
+//		printw("\n");
 	#else
 		printf("\n");
 	#endif
@@ -1526,24 +1536,20 @@ static void handler(int sig __rte_unused)
 			flows+=1;
 			sum += pkt_ctr[i].ctr[1];
 		}
-
-		//if (pkt_ctr[i].ctr[0] > 0)
-			//printf("%u: %u  %u: %u \n", pkt_ctr[i].hi_f1, pkt_ctr[i].ctr[0], pkt_ctr[i].hi_f2, pkt_ctr[i].ctr[1]);
 		fprintf(f1, "%u: %u  %u: %u \n", pkt_ctr[i].hi_f1, pkt_ctr[i].ctr[0], pkt_ctr[i].hi_f2, pkt_ctr[i].ctr[1]);
 	}
 	fclose(f1);
 
 	#ifdef NC
 
-	printw("\t[In total]: %d flows with %d packets %d ring loss\n", flows, sum, ring_loss);
-	printw("\t[Total flows]: %d\n", flows);
-	refresh();
-	attroff(A_BLINK);
+	mvprintw(10,x/2+4, "total number of flows:\t\t %d", flows);
+	//refresh();
 
-        printw("\n\tFlow id \t Pkts \t IPG \t stdDev IPG\n");
-        for (i=0; i<20; i++)
+	mvprintw(12,x/2+4, "Statistics for the first %d flows:", NUM_SHOWN);
+        mvprintw(13, x/2+4, "Flow id \t Pkts \t IPG \t stdDev IPG");
+        for (i=0; i<NUM_SHOWN; i++)
         {
-                printw("\t[Flow %d]: \t%lu, \t%.0lf, \t%lf\n", i+1, pkt_ctr[i].ctr[0], pkt_ctr[i].avg[0], pkt_ctr[i].stdDev[0]);
+                mvprintw(14+i, x/2+4,"[Flow %d]: \t%lu, \t%.0lf, \t%lf", i+1, pkt_ctr[i].ctr[0], pkt_ctr[i].avg[0], pkt_ctr[i].stdDev[0]);
         }
 
 	#else
