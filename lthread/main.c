@@ -473,7 +473,7 @@ static void timer_cb(__attribute__((unused)) struct rte_timer *tim,
 	rte_eth_stats_get(portid, &eth_stats);
 
 #ifdef NC
-        int x, y;
+        int x, y __attribute__((unused));
 	struct nc_flow tmp[NUM_SHOWN] = {{0,0,0,0,0}};
         WINDOW *win;
         char msg[] = "  FlowMon-DPDK Sigcomm Demo  ";
@@ -1187,13 +1187,6 @@ lthread_tx_per_ring(void *dummy)
 	struct rte_mbuf *pkts_burst[MAX_PKT_BURST];
 	struct lthread_cond *ready;
 
-	struct ipv4_hdr *ipv4_hdr;
-	struct tcp_hdr *tcp;
-
-	union rte_thash_tuple ipv4_tuple;
-	//struct ipv4_5tuple ipv4_tuple = {0,0,0,0,0};
-	uint32_t hash;
-
 #ifdef IPG
 	int64_t curr, global;
 #endif
@@ -1235,27 +1228,6 @@ lthread_tx_per_ring(void *dummy)
 
 			for (buf=0; buf<nb_rx; buf++)
 			{
-/*				ipv4_hdr = (struct ipv4_hdr *)(rte_pktmbuf_mtod(pkts_burst[buf], struct ether_hdr *) + 1);
-				ipv4_tuple.v4.src_addr = rte_be_to_cpu_32(ipv4_hdr->src_addr);
-				ipv4_tuple.v4.dst_addr = rte_be_to_cpu_32(ipv4_hdr->dst_addr);
-				//ipv4_tuple.proto = ipv4_hdr->next_proto_id;
-
-				tcp = (struct tcp_hdr *)((unsigned char *)ipv4_hdr + sizeof(struct ipv4_hdr));
-				ipv4_tuple.v4.sport = rte_be_to_cpu_16(tcp->src_port);
-				ipv4_tuple.v4.dport = rte_be_to_cpu_16(tcp->dst_port);
-				//printf("%u %u %u\n", ipv4_hdr->next_proto_id, ipv4_tuple.dport, ipv4_tuple.sport);
-
-				hash = rte_softrss_be((uint32_t *)&ipv4_tuple, RTE_THASH_V4_L3_LEN, converted_rss_key);
-				//hash = ipv4_tuple.v4.src_addr + ipv4_tuple.v4.dst_addr + ipv4_tuple.v4.sport + ipv4_tuple.v4.dport;
-				//hash = ipv4_tuple.v4.src_addr ^ ipv4_tuple.v4.dst_addr ^ ipv4_tuple.v4.sport ^ ipv4_tuple.v4.dport;
-				//MurmurHash3_x64_128(&ipv4_tuple, sizeof(ipv4_tuple), 1, &hash);
-				//hash = spooky_hash32(&ipv4_tuple,sizeof(ipv4_tuple), 1);
-
-				rte_pktmbuf_free(pkts_burst[buf]);
-
-				index_l = hash & 0xffff;
-				index_h = (hash & 0xffff0000) >> 16;
-*/
                                 index_l = pkts_burst[buf]->hash.rss & 0xffff;
                                 index_h = (pkts_burst[buf]->hash.rss & 0xffff0000)>>16;
 
@@ -1265,8 +1237,6 @@ lthread_tx_per_ring(void *dummy)
 				{
 					pkt_ctr[index_l].hi_f1 = index_h;
 					pkt_ctr[index_l].ctr[0]++;
-
-					//printf("index low: %d, index high: %d\n", index_l, index_h);
 
 					#ifdef IPG
                                         pkt_ctr[index_l].avg[0] = pkt_ctr[index_l].ipg[0] = 0;
@@ -1466,7 +1436,7 @@ static void handler(int sig __rte_unused)
 	uint64_t sum = 0;
 
 #ifdef NC
-	int x, y;
+	int x, y __attribute__((unused));
 	getmaxyx(stdscr, y, x);
 	attron(A_BOLD);
 	mvprintw(7, x/16, "Summary of the session:");
