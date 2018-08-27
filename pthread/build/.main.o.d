@@ -196,20 +196,6 @@ dep_main.o = /home/tzhang/FlowMon-DPDK/pthread/main.c \
  /usr/include/x86_64-linux-gnu/bits/in.h \
  /home/tzhang/dpdk-stable-17.05.1/x86_64-native-linuxapp-gcc/include/rte_tcp.h \
  /home/tzhang/FlowMon-DPDK/pthread/init.h \
- /home/tzhang/FlowMon-DPDK/pthread/sched_deadline_init.h \
- /usr/include/linux/unistd.h /usr/include/x86_64-linux-gnu/asm/unistd.h \
- /usr/include/x86_64-linux-gnu/asm/unistd_64.h \
- /usr/include/linux/kernel.h /usr/include/linux/sysinfo.h \
- /usr/include/linux/types.h /usr/include/x86_64-linux-gnu/asm/types.h \
- /usr/include/asm-generic/types.h /usr/include/asm-generic/int-ll64.h \
- /usr/include/x86_64-linux-gnu/asm/bitsperlong.h \
- /usr/include/asm-generic/bitsperlong.h /usr/include/linux/posix_types.h \
- /usr/include/linux/stddef.h \
- /usr/include/x86_64-linux-gnu/asm/posix_types.h \
- /usr/include/x86_64-linux-gnu/asm/posix_types_64.h \
- /usr/include/asm-generic/posix_types.h \
- /usr/include/x86_64-linux-gnu/sys/syscall.h \
- /usr/include/x86_64-linux-gnu/bits/syscall.h \
  /home/tzhang/FlowMon-DPDK/pthread/flow_id.h \
  /home/tzhang/FlowMon-DPDK/pthread/murmur3.h \
  /home/tzhang/FlowMon-DPDK/pthread/spooky.h

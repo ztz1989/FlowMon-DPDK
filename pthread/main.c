@@ -53,7 +53,7 @@ double dur[2] = {0,0};
 #define MAX_RX_QUEUE_PER_LCORE 16
 #define NB_SOCKETS 4
 #define NB_MBUF 4096
-#define SD
+//#define SD
 
 int bits, b1;
 uint32_t result = 0;
@@ -63,6 +63,9 @@ double th = 0;
 
 #ifdef SD
 	#include "sched_deadline_init.h"
+#endif
+#ifdef RR
+	#include "sched_rr_init.h"
 #endif
 
 #include "flow_id.h"
@@ -672,9 +675,11 @@ lcore_main_rx(__attribute__((unused)) void *dummy)
 //	struct timeval stop, start;
 
 #ifdef SD
-        set_affinity(6,20);
+        set_affinity(2,4);
 #endif
-
+#ifdef RR
+	set_affinity();
+#endif
 	printf("[Runtime settings]: lcore %u checks queue %d\n", lcore_id, q);
 
 	for (;;)
@@ -1052,7 +1057,9 @@ lcore_main_count_double_hash(__attribute__((unused)) void *dummy)
 	struct ipv4_hdr *ipv4_hdr;
         struct tcp_hdr *tcp;
 
-//      union rte_thash_tuple ipv4_tuple;
+#ifdef RR
+        set_affinity();
+#endif
 
 	struct ipv4_5tuple ip = {0,0,0,0,0};
 

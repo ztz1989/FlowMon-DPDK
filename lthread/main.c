@@ -221,7 +221,7 @@ static int batch_n[RX_RINGS];
 uint8_t converted_rss_key[RTE_DIM(default_rss_key)];
 
 #ifdef NC
-#define NUM_SHOWN 20
+#define NUM_SHOWN 100
 static inline
 void init_gui(void)
 {
@@ -475,12 +475,13 @@ static void timer_cb(__attribute__((unused)) struct rte_timer *tim,
 #ifdef NC
         int x, y __attribute__((unused));
 	struct nc_flow tmp[NUM_SHOWN] = {{0,0,0,0,0}};
+	getmaxyx(stdscr, y, x);
+
         WINDOW *win;
         char msg[] = "  FlowMon-DPDK Sigcomm Demo  ";
-        char msg1[] = "Dario Rossi  NewNet@Paris";
+        char msg1[] = "Tianzhu Zhang | TeamRossi NewNet@Paris";
         int len = strlen(msg);
 
-        getmaxyx(stdscr, y, x);
         win = newwin(6, 0.5*x, 1, x/4);
 
         box(win, '|', '-');
@@ -488,7 +489,7 @@ static void timer_cb(__attribute__((unused)) struct rte_timer *tim,
         mvprintw(3, 0.5*x-0.5*len, msg);
         attroff(A_STANDOUT|A_BOLD);
         attron(A_BOLD);
-        mvprintw(5, 0.5*x, msg1);
+        mvprintw(5, 0.4*x-5, msg1);
 
         touchwin(win);
         wrefresh(win);

@@ -62,7 +62,6 @@ uint32_t result = 0;
 //#define LINKED_LIST
 #define HASH_LIST
 
-
 #define IPG
 #define ENTRY_PER_FLOW 1
 
@@ -902,10 +901,8 @@ lcore_main_count_hash_list(__attribute__((unused)) void *dummy)
 				global += gCtr[--qNum];
 		#endif
 
-		for (buf = 0; buf < nb_rx; buf++)
-			 rte_pktmbuf_free(bufs[buf]);
 		/* Per packet processing */
-/*              for (buf = 0; buf < nb_rx; buf++)
+                for (buf = 0; buf < nb_rx; buf++)
                 {
 			index_l = bufs[buf]->hash.rss & 0xffff;
 			index_h = (bufs[buf]->hash.rss & 0xffff0000)>>16;
@@ -1014,7 +1011,7 @@ lcore_main_count_hash_list(__attribute__((unused)) void *dummy)
 				}
 			}
                 }
-*/
+
 	}
 }
 #endif
@@ -1366,6 +1363,7 @@ static void handler(int sig)
                 {
                         if (pkt_ctr[i].ctr[0]>0)        sum+=1;
                         if (pkt_ctr[i].ctr[1]>0)        sum+=1;
+
 /*			if (pkt_ctr[i].ctr[0]>0)
 			{
 				printf("[Flow entry %d] %d: %ld", i, pkt_ctr[i].hi_f1, pkt_ctr[i].ctr[0]);
@@ -1379,15 +1377,15 @@ static void handler(int sig)
 
 		printf("\nThe total number of flows is %lu\n", sum);
 
-	if (write_on)
-	{
-		FILE *fp;
-		fp = fopen("./tmp.txt", "a");
-		fprintf(fp, "%lu %lu %lu %lu %lu\n", eth_stats.ipackets + eth_stats.imissed + eth_stats.ierrors, eth_stats.imissed, gCtr[0], gCtr[1], sum);
-		fclose(fp);
-	}
+		if (write_on)
+		{
+			FILE *fp;
+			fp = fopen("./tmp.txt", "a");
+			fprintf(fp, "%lu %lu %lu %lu %lu\n", eth_stats.ipackets + eth_stats.imissed + eth_stats.ierrors, eth_stats.imissed, gCtr[0], gCtr[1], sum);
+			fclose(fp);
+		}
 
-	exit(1);
+		exit(1);
 }
 
 static int
@@ -1429,7 +1427,6 @@ pthread_run(__rte_unused void *arg)
 
 int main(int argc, char **argv)
 {
-	//struct rte_mempool *mbuf_pool;
 	unsigned lcore_id;
 	uint32_t nb_lcores, nb_ports;
 	uint8_t portid, qid;
@@ -1462,8 +1459,6 @@ int main(int argc, char **argv)
 	ret = parse_args(argc, argv);
 	if (ret < 0)
 		rte_exit(EXIT_FAILURE, "Wrong APP parameters\n");
-
-//	printf("Write file %u\n", write_on);
 
 	printf("Initializing rx-queues...\n");
 	ret = init_rx_queues();
