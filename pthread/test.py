@@ -9,12 +9,12 @@
 
 import subprocess, time, signal, random, sys
 
-port = int(sys.argv[1])
+port = int(sys.argv[1]) if len(sys.argv)>1 else 2
 port_mask = 2**port
 
-for _ in range(50):
+for _ in range(10):
 	p = subprocess.Popen(["./build/FlowMon-DPDK", "-l", "0,2,4,6,8", "--", "-P", "-p", str(port_mask), '--rx="(' + str(port) + ',0,2,0)(' + str(port) + ',1,4,1)"', '--tx="(6,0)(8,1)"', "--write-file"])
 
-	time.sleep(370)
+	time.sleep(140)
 	p.send_signal(signal.SIGINT)
 	time.sleep(6)

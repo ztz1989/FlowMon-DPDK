@@ -769,7 +769,7 @@ lcore_main_count_hash_list(__attribute__((unused)) void *dummy)
 			index_l = bufs[buf]->hash.rss & 0xffff;
 			index_h = (bufs[buf]->hash.rss & 0xffff0000)>>16;
 			rte_pktmbuf_free(bufs[buf]);
-
+#ifdef FLOW_LEVEL
 			if(pkt_ctr[index_l].hi_f1 == 0)
 			{
 				pkt_ctr[index_l].hi_f1 = index_h;
@@ -871,8 +871,8 @@ lcore_main_count_hash_list(__attribute__((unused)) void *dummy)
 					}
 				}
 			}
-                }
-
+#endif
+	        }
 	}
 }
 #endif

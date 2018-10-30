@@ -60,9 +60,9 @@ uint32_t result = 0;
 
 //#define DOUBLE_HASH
 //#define LINKED_LIST
-#define HASH_LIST
+//#define HASH_LIST
 
-#define IPG
+//#define IPG
 #define ENTRY_PER_FLOW 1
 
 #ifdef SD

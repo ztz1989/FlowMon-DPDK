@@ -11,8 +11,8 @@ else:
 	print "invalid argument"
 	sys.exit(0)
 
-for _ in range(50):
-	p = subprocess.Popen(["/home/tzhang/MoonGen/build/MoonGen", "flow-level.lua", "2"])
-	time.sleep(370)
+for _ in range(10):
+	p = subprocess.Popen(["/home/tzhang/MoonGen/build/MoonGen", script, "2"])
+	time.sleep(140)
 	p.send_signal(signal.SIGINT)
 	time.sleep(6)
