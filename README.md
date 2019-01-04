@@ -1,4 +1,4 @@
-# FlowMon-DPDK
+# FlowMonitor-DPDK
 FlowMonitor-DPDK is a software traffic monitor with fine-grained statistics:
  a pure DPDK application written in C language, it provides detailed statistics on both packet- and flow-level. 
  
